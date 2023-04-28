@@ -433,7 +433,6 @@
     (let ((block (unwrap! (parse-block-header header) (err ERR-BAD-HEADER))))
       (was-tx-mined-internal height tx header (get merkle-root block) proof)))
 
-
 (define-read-only (was-wtx-mined-compact (tx (buff 4096)) (witness-root-hash (buff 32)) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
   (was-wtx-mined-internal tx witness-root-hash proof))
 
@@ -446,7 +445,8 @@
 	(tree-depth uint)
 	(wproof (list 14 (buff 32))) ;; merkle proof for wtxids
   (witness-merkle-root (buff 32)) ;; merkle root of wtxids
-	(ctx (buff 1024)) ;; coinbase tx, contains the witness root hash
+  (witness-reserved-data (buff 32)) ;; merkle root of wtxids
+	(ctx (buff 1024)) ;; non-segwit coinbase tx, contains the witness root hash
 	(cproof (list 14 (buff 32))) ;; merkle proof for coinbase tx
 	;; proof and cproof trees could somehow be condensed into a single list
 	;; because they converge at some point
@@ -455,9 +455,8 @@
     (asserts! (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth })) (err u11))
     (let (
       (parsed-ctx (try! (parse-tx ctx)))
-      (witness-reserved-value (get hash (get outpoint (unwrap-panic (element-at? (get ins parsed-ctx) u0)))))
-      (witness-out (get scriptPubKey (unwrap-panic (element-at? (get outs parsed-ctx) u0))))
-      (final-hash (sha256 (sha256 (concat witness-merkle-root witness-reserved-value))))
+      (witness-out (get scriptPubKey (unwrap-panic (element-at? (get outs parsed-ctx) u1))))
+      (final-hash (sha256 (sha256 (concat witness-merkle-root witness-reserved-data))))
     )
       (asserts! (is-eq witness-out (concat 0x6a24aa21a9ed final-hash)) (err u22))
       (asserts! (try! (was-wtx-mined-compact tx witness-merkle-root { tx-index: tx-index, hashes: wproof, tree-depth: tree-depth })) (err u33))
