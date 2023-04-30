@@ -6,6 +6,8 @@
 (define-constant ERR-BAD-HEADER u5)
 (define-constant ERR-PROOF-TOO-SHORT u6)
 (define-constant ERR-TOO-MANY-WITNESSES u7)
+(define-constant ERR-INVALID-COMMITMENT u8)
+(define-constant ERR-WITNESS-TX-NOT-IN-COMMITMENT u9)
 
 ;; Reads the next two bytes from txbuff as a little-endian 16-bit integer, and updates the index.
 ;; Returns (ok { uint16: uint, ctx: { txbuff: (buff 1024), index: uint } }) on success.
@@ -455,15 +457,33 @@
     (asserts! (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth })) (err u11))
     (let (
       (parsed-ctx (try! (parse-tx ctx)))
-      (witness-out (get scriptPubKey (unwrap-panic (element-at? (get outs parsed-ctx) u1))))
+      (witness-out (get-commitment-scriptPubKey (get outs parsed-ctx)))
       (final-hash (sha256 (sha256 (concat witness-merkle-root witness-reserved-data))))
     )
-      (asserts! (is-eq witness-out (concat 0x6a24aa21a9ed final-hash)) (err u22))
-      (asserts! (try! (was-wtx-mined-compact tx witness-merkle-root { tx-index: tx-index, hashes: wproof, tree-depth: tree-depth })) (err u33))
+      (asserts! (is-eq witness-out (concat 0x6a24aa21a9ed final-hash)) (err ERR-INVALID-COMMITMENT))
+      (asserts! (try! (was-wtx-mined-compact tx witness-merkle-root { tx-index: tx-index, hashes: wproof, tree-depth: tree-depth })) (err ERR-WITNESS-TX-NOT-IN-COMMITMENT))
       
       (ok (get-txid tx))
     )
   )
+)
+
+;; gets the scriptPubKey in the last output that follows the 0x6a24aa21a9ed pattern regardless of its content
+;; as per BIP-0141 (https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#commitment-structure)
+(define-read-only (get-commitment-scriptPubKey (outs (list 8 { value: uint, scriptPubKey: (buff 128) })))
+  (fold read-next-commitment-scriptPubKey outs 0x)
+)
+
+(define-read-only (read-next-commitment-scriptPubKey (out { value: uint, scriptPubKey: (buff 128) }) (res (buff 128)))
+  (let
+    ((commitment (get scriptPubKey out)))
+    (if (is-commitment-pattern commitment) commitment res)
+  )
+)
+
+;; if invalid length or does not have the prefix, false
+(define-read-only (is-commitment-pattern (scriptPubKey (buff 128)))
+  (asserts! (<= 0x6a24aa21a9ed scriptPubKey) false)
 )
 
 ;; (define-read-only (was-tx-mined (height uint) (tx (buff 1024)) (header { version: (buff 4), parent: (buff 32), merkle-root: (buff 32), timestamp: (buff 4), nbits: (buff 4), nonce: (buff 4) }) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
