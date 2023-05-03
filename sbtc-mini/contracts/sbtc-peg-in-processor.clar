@@ -1,7 +1,7 @@
 (define-constant err-peg-in-expired (err u500))
 (define-constant err-not-a-peg-wallet (err u501))
 
-(define-read-only (extract-data (tx (buff 4096)))
+(define-read-only (extract-data (tx (buff 4096)) (p2tr-unlock-script (buff 128)))
 	;; It verifies the tapscript is the expected format.
 	;; - "before burn height N, address X can spend, or else Y can spend"
 
@@ -9,10 +9,14 @@
 	;; - The total BTC value pegged in, in sats
 	;; - The recipient principal as found in the tapscript
 	;; - The burnchain peg-in expiry height
+
+	;; if p2tr-unlock-script is an empty buffer, then the data must be in OP_RETURN.
+	;; (is-eq (len p2tr-unlock-script) u0)
+
 	;; make the type checker happy
 	(if true (ok {
 		recipient: 'ST000000000000000000002AMW42H,
-		peg-wallet: { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699},
+		peg-wallet: { version: 0x01, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699},
 		value: u100,
 		expiry-burn-height: (+ burn-block-height u10)
 		})
@@ -25,6 +29,7 @@
 (define-public (complete-peg-in
 	(burn-height uint)
 	(tx (buff 4096))
+	(p2tr-unlock-script (buff 128))
 	(header (buff 80))
 	(tx-index uint)
 	(tree-depth uint)
@@ -36,7 +41,7 @@
 		;; check if the tx was mined
 		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof ctx cproof)))
 		;; extract data from the tx
-		(peg-in-data (try! (extract-data tx)))
+		(peg-in-data (try! (extract-data tx p2tr-unlock-script)))
 		)
 		;; check if the tx has not been processed before and if the
 		;; mined peg-in reached the minimum amount of confirmations.
