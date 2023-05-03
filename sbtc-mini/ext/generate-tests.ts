@@ -71,17 +71,43 @@ Clarinet.run({
 	}
 });
 
-function generateTest(contractPrincipal: string, testFunction: string, meta: { [key: string]: string | boolean }) {
+type MetaData = { [key: string]: string | boolean };
+
+function generatePrepareTx(contractPrincipal: string, meta: MetaData) {
+	return `Tx.contractCall('${contractPrincipal}', '${meta['prepare']}', [], deployer.address)`;
+}
+
+function generateNormalMineBlock(contractPrincipal: string, testFunction: string, meta: MetaData) {
+	return `let block = chain.mineBlock([
+		${meta['prepare'] ? `${generatePrepareTx(contractPrincipal, meta)},` : ''}
+		Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)
+	]);`;
+}
+
+function generateSpecialMineBlock(mineBlocksBefore: number, contractPrincipal: string, testFunction: string, meta: MetaData) {
+	let code = ``;
+	if (meta['prepare']) {
+		code = `let prepareBlock = chain.mineBlock([${generatePrepareTx(contractPrincipal, meta)}]);
+		prepareBlock.receipts.map(({result}) => result.expectOk());`;
+	}
+	if (mineBlocksBefore > 1)
+		code += `
+		chain.mineEmptyBlock(${mineBlocksBefore - 1});`;
+	return `${code}
+		let block = chain.mineBlock([Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)]);`;
+}
+
+function generateTest(contractPrincipal: string, testFunction: string, meta: MetaData) {
+	const mineBlocksBefore = parseInt(meta['mine-blocks-before'] as string) || 0;
 	return `Clarinet.test({
 	name: "${meta.name ? testFunction + ': ' + (meta.name as string).replace(/"/g, '\\"') : testFunction}",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const deployer = accounts.get("deployer")!;
 		bootstrap(chain, deployer);
 		let callerAddress = ${meta.caller ? (meta.caller[0] === "'" ? `"${(meta.caller as string).substring(1)}"` : `accounts.get('${meta.caller}')!.address`) : `accounts.get('deployer')!.address`};
-		let block = chain.mineBlock([
-			${meta['prepare'] ? `Tx.contractCall('${contractPrincipal}', '${meta['prepare']}', [], deployer.address),` : ''}
-			Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)
-		]);
+		${mineBlocksBefore >= 1
+			? generateSpecialMineBlock(mineBlocksBefore, contractPrincipal, testFunction, meta)
+			: generateNormalMineBlock(contractPrincipal, testFunction, meta)}
 		block.receipts.map(({result}) => result.expectOk());
 	}
 });
