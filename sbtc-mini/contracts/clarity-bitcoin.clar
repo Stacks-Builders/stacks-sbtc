@@ -492,11 +492,15 @@
 ;; Verify block header and merkle proof
 ;; This function must only called with the merkle root of the provided header
 (define-private (was-tx-mined-internal (height uint) (tx (buff 1024)) (header (buff 80)) (merkle-root (buff 32)) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
-    (if
-      (verify-block-header-test header height)
-        (verify-merkle-proof (get-reversed-txid tx) (reverse-buff32 merkle-root) proof)
-        (err u1)
-    )
+  (if (verify-block-header-test header height)
+      (begin
+        (if (is-eq merkle-root (get-txid tx))
+          (ok true)
+          (verify-merkle-proof (get-reversed-txid tx) (reverse-buff32 merkle-root) proof)
+        )
+      )
+    (err u1)
+  )
 )
 
 (define-private (was-wtx-mined-internal (tx (buff 4096)) (merkle-root (buff 32)) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
