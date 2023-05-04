@@ -20,8 +20,6 @@ function extractTestMetadata(contractSource: string) {
 	const functionMeta = {};
 	const matches = contractSource.replace(/\r/g, "").matchAll(functionRegex);
 	for (const [, comments, functionName] of matches) {
-		if (functionName.substring(0, 5) !== 'test-')
-			continue;
 		functionMeta[functionName] = {};
 		const lines = comments.split("\n");
 		for (const line of lines) {
@@ -41,6 +39,10 @@ Clarinet.run({
 			const contractName = getContractName(contractId);
 			if (!isTestContract(contractName))
 				continue;
+
+			const hasDefaultPrepareFunction = contract.contract_interface.functions.reduce(
+				(a, v) => a || (v.name === 'prepare' && v.access === 'public' && v.args.length === 0),
+				false);
 			const meta = extractTestMetadata(contract.source);
 
 			const code: string[][] = [];
@@ -57,6 +59,10 @@ Clarinet.run({
 				if (args.length > 0)
 					throw new Error(`Test functions cannot take arguments. (Offending function: ${name})`);
 				const functionMeta = meta[name] || {};
+				if (hasDefaultPrepareFunction && !functionMeta.prepare)
+					functionMeta.prepare = 'prepare';
+				if (functionMeta['no-prepare'])
+					delete functionMeta.prepare;
 				code.push([generateTest(contractId, name, functionMeta)]);
 			}
 
@@ -70,10 +76,13 @@ function generateTest(contractPrincipal: string, testFunction: string, meta: { [
 	name: "${meta.name ? testFunction + ': ' + (meta.name as string).replace(/"/g, '\\"') : testFunction}",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const deployer = accounts.get("deployer")!;
-		bootstrap(chain, ${meta['as-protocol'] ? `"${contractPrincipal}"` : 'null'}, deployer);
-		let caller = accounts.get("${meta.caller ? (meta.caller as string).replace(/"/g, '\\"') : 'deployer'}")!;
-		let block = chain.mineBlock([Tx.contractCall('${contractPrincipal}', '${testFunction}', [], caller.address)]);
-		block.receipts[0].result.expectOk();
+		bootstrap(chain, deployer);
+		let callerAddress = ${meta.caller ? (meta.caller[0] === "'" ? `"${(meta.caller as string).substring(1)}"` : `accounts.get('${meta.caller}')!.address`) : `accounts.get('deployer')!.address`};
+		let block = chain.mineBlock([
+			${meta['prepare'] ? `Tx.contractCall('${contractPrincipal}', '${meta['prepare']}', [], deployer.address),` : ''}
+			Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)
+		]);
+		block.receipts.map(({result}) => result.expectOk());
 	}
 });
 `;
@@ -98,16 +107,12 @@ export const bootstrapContracts = [
 	'.sbtc-token'
 ];
 
-// (contract-call? .sbtc-controller upgrade (list {contract: .sbtc-token, enabled: true} {contract: .sbtc-peg-in-processor, enabled: true} {contract: .sbtc-peg-out-processor, enabled: true} {contract: .sbtc-registry, enabled: true} {contract: .sbtc-stacking-pool, enabled: true} {contract: .sbtc-testnet-debug-controller, enabled: true} {contract: .sbtc-token, enabled: true}))
-export function bootstrap(chain: Chain, testContract: string | null, deployer: Account) {
-	let args = bootstrapContracts.map(contract => types.tuple({ contract, enabled: true }));
-	if (testContract !== null)
-		args.push(types.tuple({ contract: types.principal(testContract), enabled: true }));
+export function bootstrap(chain: Chain, deployer: Account) {
 	const { receipts } = chain.mineBlock([
 		Tx.contractCall(
 			\`\${deployer.address}.sbtc-controller\`,
 			'upgrade',
-			[types.list(args)],
+			[types.list(bootstrapContracts.map(contract => types.tuple({ contract, enabled: true })))],
 			deployer.address
 		)
 	]);

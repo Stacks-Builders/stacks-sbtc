@@ -51,19 +51,19 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that num-parties can be written then read",
+    name: "Ensure that num-signers can be written then read",
     async fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get("deployer")!;
 
         const block = chain.mineBlock([
-            Tx.contractCall("sbtc-alpha", "set-num-parties", [types.uint(23)], deployer.address),
+            Tx.contractCall("sbtc-alpha", "set-num-signers", [types.uint(23)], deployer.address),
         ]);
 
         const [receipt] = block.receipts;
 
         receipt.result.expectOk().expectBool(true);
 
-        const coordinator = chain.callReadOnlyFn("sbtc-alpha", "get-num-parties", [], deployer.address);
+        const coordinator = chain.callReadOnlyFn("sbtc-alpha", "get-num-signers", [], deployer.address);
 
         coordinator.result.expectUint(23);
     },
@@ -121,7 +121,7 @@ Clarinet.test({
         const deployer = accounts.get("deployer")!;
 
         const block = chain.mineBlock([
-            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(1), types.tuple({addr: types.principal(deployer.address), key: types.buff(0x000000000000000000000000000000000000000000000000000000000000000000)})], deployer.address),
+            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(1), types.tuple({addr: types.principal(deployer.address), "public-key": types.buff(0x000000000000000000000000000000000000000000000000000000000000000000), "key-ids": types.list([types.uint(1)])})], deployer.address),
         ]);
 
         const [receipt] = block.receipts;
@@ -140,7 +140,7 @@ Clarinet.test({
         const deployer = accounts.get("deployer")!;
 
         const block_set = chain.mineBlock([
-            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(1), types.tuple({addr: types.principal(deployer.address), key: types.buff(0x000000000000000000000000000000000000000000000000000000000000000000)})], deployer.address),            
+            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(1), types.tuple({addr: types.principal(deployer.address), "public-key": types.buff(0x000000000000000000000000000000000000000000000000000000000000000000), "key-ids": types.list([types.uint(1)])})], deployer.address),
         ]);
 
         const [receipt_set] = block_set.receipts;
@@ -166,24 +166,24 @@ Clarinet.test({
 });
 
 Clarinet.test({
-    name: "Ensure that set-signer-info fails if the key-id is out of range",
+    name: "Ensure that set-signer-info fails if the signer-id is out of range",
     async fn(chain: Chain, accounts: Map<string, Account>) {
         const deployer = accounts.get("deployer")!;
 
         let block = chain.mineBlock([
-            Tx.contractCall("sbtc-alpha", "set-num-keys", [types.uint(23)], deployer.address),
+            Tx.contractCall("sbtc-alpha", "set-num-signers", [types.uint(23)], deployer.address),
         ]);
 
         let [receipt] = block.receipts;
 
         receipt.result.expectOk().expectBool(true);
 
-        const coordinator = chain.callReadOnlyFn("sbtc-alpha", "get-num-keys", [], deployer.address);
+        const coordinator = chain.callReadOnlyFn("sbtc-alpha", "get-num-signers", [], deployer.address);
 
         coordinator.result.expectUint(23);
 
         block = chain.mineBlock([
-            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(23), types.tuple({addr: types.principal(deployer.address), key: types.buff(0x000000000000000000000000000000000000000000000000000000000000000000)})], deployer.address),
+            Tx.contractCall("sbtc-alpha", "set-signer-data", [types.uint(23), types.tuple({addr: types.principal(deployer.address), "public-key": types.buff(0x000000000000000000000000000000000000000000000000000000000000000000), "key-ids": types.list([types.uint(1)])})], deployer.address),
         ]);
 
         [receipt] = block.receipts;

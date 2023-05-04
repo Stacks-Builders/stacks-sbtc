@@ -70,6 +70,11 @@ path = 'tests/clarity-bitcoin_test.clar'
 clarity_version = 2
 epoch = 2.1
 
+[contracts.sbtc-token_test]
+path = 'tests/sbtc-token_test.clar'
+clarity_version = 2
+epoch = 2.1
+
 [repl.analysis]
 passes = ['check_checker']
 

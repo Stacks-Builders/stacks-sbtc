@@ -7,6 +7,7 @@ members = [
   "stacks-coordinator",
   "stacks-signer",
   "stacks-doctor",
+  "test-utils",
   "yarpc"]
 
 [workspace.dependencies]

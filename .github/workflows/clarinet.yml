@@ -7,7 +7,7 @@ on:
 
 jobs:
   check:
-    name: Clarinet check for sbtc-ops
+    name: Clarinet check for sbtc-ops and sbtc-mini
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -23,13 +23,30 @@ jobs:
           components: rustfmt
           override: true
 
-      - name: Install clarinet
-        run: chmod +x ./bin/install_clarinet_acton.sh && ./bin/install_clarinet_acton.sh
+      - name: Install clarinet develop version
+        run: chmod +x ./bin/install_clarinet_ubuntu.sh && ./bin/install_clarinet_ubuntu.sh
 
-      - name: Run clarinet check
+      - name: Run clarinet check for sbtc-ops
         working-directory: ./sbtc-ops/clarinet
         run: clarinet check
 
-      - name: Run clarinet test
+      - name: Run clarinet test for sbtc-ops
         working-directory: ./sbtc-ops/clarinet
         run: clarinet test
+
+      - name: Run unit tests for sbtc-mini
+        working-directory: ./sbtc-mini
+        run: ./scripts/test.sh
+
+      - name: Print coverage report
+        working-directory: ./sbtc-mini
+        run: sudo apt-get install -qq -y lcov html2text > /dev/null && genhtml .coverage/lcov.info -o .coverage/ && html2text .coverage/contracts/index.html
+
+      - name: "Export sbtc-mini code coverage"
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./sbtc-mini/.coverage/
+          files: lcov.info
+          verbose: false
+          flags: unittests
+          ignore: tests

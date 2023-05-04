@@ -1,3 +1,3 @@
 #!/bin/sh
-genhtml .coverage/lcov.info -o .coverage/
+genhtml coverage.lcov -o .coverage/
 open .coverage/index.html

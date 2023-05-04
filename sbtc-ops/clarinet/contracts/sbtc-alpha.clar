@@ -24,14 +24,14 @@
 (define-data-var contract-owner principal tx-sender)
 (define-data-var coordinator (optional {addr: principal, key: (buff 33)}) none)
 (define-data-var num-keys uint u4000)
-(define-data-var num-parties uint u4000)
+(define-data-var num-signers uint u4000)
 (define-data-var threshold uint u2800)
 (define-data-var bitcoin-wallet-address (optional (string-ascii 72)) none)
 (define-data-var trading-halted bool false)
 
 ;; data maps
 ;;
-(define-map signers uint {addr: principal, key: (buff 33)})
+(define-map signers uint {addr: principal, public-key: (buff 33), key-ids: (list 4000 uint)})
 
 ;; public functions
 ;;
@@ -56,10 +56,10 @@
     )
 )
 
-(define-public (set-num-parties (n uint))
+(define-public (set-num-signers (n uint))
     (begin
         (asserts! (is-contract-owner) (err err-invalid-caller))
-        (ok (var-set num-parties n))
+        (ok (var-set num-signers n))
     )
 )
 
@@ -77,7 +77,7 @@
     )
 )
 
-(define-public (set-signer-data (id uint) (data {addr: principal, key: (buff 33)}))
+(define-public (set-signer-data (id uint) (data {addr: principal, public-key: (buff 33), key-ids: (list 4000 uint)}))
     (begin
         (asserts! (is-contract-owner) (err err-invalid-caller))
         (asserts! (is-valid-signer-id id) (err err-invalid-signer-id))
@@ -136,8 +136,8 @@
     (var-get num-keys)
 )
 
-(define-read-only (get-num-parties)
-    (var-get num-parties)
+(define-read-only (get-num-signers)
+    (var-get num-signers)
 )
 
 (define-read-only (get-threshold)
@@ -198,5 +198,5 @@
 )
 
 (define-private (is-valid-signer-id (id uint))
-    (and (>= id u0) (< id (var-get num-keys)))
+    (and (>= id u0) (< id (var-get num-signers)))
 )

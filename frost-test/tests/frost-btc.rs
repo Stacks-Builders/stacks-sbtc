@@ -6,9 +6,9 @@ use bitcoin::{
     EcdsaSighashType, OutPoint, PackedLockTime, SchnorrSighashType, Script, Transaction,
     XOnlyPublicKey,
 };
-use frost_test::bitcoind;
-use frost_test::bitcoind::{bitcoind_mine, bitcoind_rpc, gen_config};
 use rand_core::OsRng;
+use test_utils::BitcoinProcess;
+use ureq::serde_json::Value;
 use wtfrost::common::PolyCommitment;
 use wtfrost::{
     bip340::{
@@ -18,6 +18,13 @@ use wtfrost::{
     v1::{self, SignatureAggregator},
     Point,
 };
+
+fn mine(btcd: &BitcoinProcess, public_key_bytes: &[u8; 33]) -> Value {
+    let public_key = bitcoin::PublicKey::from_slice(public_key_bytes).unwrap();
+    let address = bitcoin::Address::p2wpkh(&public_key, bitcoin::Network::Regtest).unwrap();
+
+    btcd.rpc("generatetoaddress", (128, address.to_string()))
+}
 
 #[test]
 fn blog_post() {
@@ -132,8 +139,7 @@ fn frost_btc() {
         bitcoin::PublicKey::from_slice(&group_public_key.compress().as_bytes()).unwrap();
 
     // bitcoind regtest
-    let config = gen_config();
-    let _bitcoind_pid = bitcoind::bitcoind_setup(&config);
+    let btc = BitcoinProcess::new();
 
     // create user keys
     let user_secret_key = bitcoin::secp256k1::SecretKey::new(&mut rand::thread_rng());
@@ -153,7 +159,7 @@ fn frost_btc() {
     );
 
     // mine block to create btc
-    let result = bitcoind_mine(&user_public_key.serialize().try_into().unwrap(), &config);
+    let result = mine(&btc, &user_public_key.serialize().try_into().unwrap());
     let block_id = result
         .as_array()
         .unwrap()
@@ -162,16 +168,15 @@ fn frost_btc() {
         .as_str()
         .unwrap();
     println!("mined block_id {:?}", block_id);
-    let result = bitcoind_rpc("getblock", [block_id], &config);
+    let result = btc.rpc("getblock", [block_id]);
     let block = result.as_object().unwrap();
     let txid = block.get("tx").unwrap().get(0).unwrap().as_str().unwrap();
     println!("mined txid {:?}", txid);
-    let result = bitcoind_rpc("getrawtransaction", (txid, false, block_id), &config);
+    let result = btc.rpc("getrawtransaction", (txid, false, block_id));
     let user_funding_transaction_bytes_hex = result.as_str().unwrap();
-    let _ = bitcoind_rpc(
+    let _ = btc.rpc(
         "decoderawtransaction",
         [&user_funding_transaction_bytes_hex],
-        &config,
     );
 
     // Peg in to stx address
@@ -241,9 +246,9 @@ fn frost_btc() {
             .collect::<Vec<_>>()
     );
     let peg_in_bytes_hex = hex::encode(&peg_in_bytes);
-    let _ = bitcoind_rpc("decoderawtransaction", [&peg_in_bytes_hex], &config);
+    let _ = btc.rpc("decoderawtransaction", [&peg_in_bytes_hex]);
     println!("peg-in tx bytes {}", peg_in_bytes_hex);
-    let peg_in_result_value = bitcoind_rpc("sendrawtransaction", [&peg_in_bytes_hex], &config);
+    let peg_in_result_value = btc.rpc("sendrawtransaction", [&peg_in_bytes_hex]);
     assert!(peg_in_result_value.is_string(), "{}", peg_in_result_value);
 
     let peg_in_utxo = &peg_in.output[1];
@@ -303,7 +308,7 @@ fn frost_btc() {
 
     println!("peg-out tx bytes {}", &peg_out_bytes_hex);
 
-    let peg_out_result_value = bitcoind_rpc("sendrawtransaction", [&peg_out_bytes_hex], &config);
+    let peg_out_result_value = btc.rpc("sendrawtransaction", [&peg_out_bytes_hex]);
     assert!(peg_out_result_value.is_string(), "{}", peg_out_result_value);
 }
 

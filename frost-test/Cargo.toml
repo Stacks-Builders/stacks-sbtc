@@ -20,3 +20,4 @@ hex = "0.4.3"
 ctrlc = "3.2.5"
 nix = "0.26.2"
 libc = "0.2.139"
+test-utils = { path = "../test-utils" }

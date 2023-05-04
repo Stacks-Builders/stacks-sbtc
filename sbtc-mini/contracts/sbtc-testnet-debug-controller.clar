@@ -21,7 +21,7 @@
 ;; #[allow(unchecked_data)]
 (define-public (set-debug-controller (who principal) (enabled bool))
 	(begin
-		(try! (is-debug-controller contract-caller))
+		(try! (is-debug-controller tx-sender))
 		(ok (map-set debug-controllers who enabled))
 	)
 )
@@ -29,7 +29,7 @@
 ;; #[allow(unchecked_data)]
 (define-public (set-protocol-contract (contract principal) (enabled bool))
 	(begin
-		(try! (is-debug-controller contract-caller))
+		(try! (is-debug-controller tx-sender))
 		(contract-call? .sbtc-controller upgrade (list {contract: contract, enabled: enabled}))
 	)
 )

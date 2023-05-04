@@ -62,6 +62,43 @@ jobs:
     - name: Run tests
       run: cargo test --verbose --locked ${{matrix.type}}
 
+  coverage:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: denoland/setup-deno@v1
+        if: ${{matrix.os != 'buildjet-4vcpu-ubuntu-2204-arm'}}
+        with:
+          deno-version: v1.*
+      - name: Download & install deno
+        if: ${{matrix.os == 'buildjet-4vcpu-ubuntu-2204-arm'}}
+        # use deno-arm from https://github.com/LukeChannings/deno-arm64
+        run: |
+          curl -s https://gist.githubusercontent.com/LukeChannings/09d53f5c364391042186518c8598b85e/raw/ac8cd8c675b985edd4b3e16df63ffef14d1f0e24/deno_install.sh | sh
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      # Install a specific version of Bitcoin
+      - run: ./.install/bitcoin.sh
+      - run: bitcoind --version
+      # We need to cache JS script dependencies before running `cargo test`.
+      # The `cargo test` command may spawn multiple `deno` processes.
+      - uses: actions/download-artifact@v3
+        with:
+          name: Cargo.lock
+      - name: Cache JS script dependencies
+        run: deno cache ./yarpc/js/stacks/transactions.ts
+      - run: cargo install cargo-tarpaulin
+      # - run: cargo tarpaulin
+      - run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml --avoid-cfg-tarpaulin
+      - uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: true
+
   fmt:
     runs-on: ubuntu-latest
     steps:

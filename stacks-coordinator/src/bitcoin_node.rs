@@ -16,8 +16,8 @@ pub type BitcoinTransaction = bitcoin::Transaction;
 pub enum Error {
     #[error("IO Error: {0}")]
     IOError(#[from] std::io::Error),
-    #[error("RPC call returned an invalid response: {0}")]
-    RPCError(serde_json::Value),
+    #[error("RPC Error: {0}")]
+    RPCError(String),
     #[error("{0}")]
     InvalidResponseJSON(String),
     #[error("Invalid utxo: {0}")]
@@ -64,7 +64,15 @@ impl BitcoinNode for LocalhostBitcoinNode {
     }
 
     fn load_wallet(&self, address: &BitcoinAddress) -> Result<(), Error> {
-        self.create_empty_wallet()?;
+        let result = self.create_empty_wallet();
+        if let Err(Error::RPCError(message)) = &result {
+            if !message.ends_with("Database already exists.\"") {
+                return result;
+            }
+            // If the database already exists, no problem. Just emit a warning.
+            warn!(message);
+        }
+        // Import the address
         self.import_address(address)?;
         Ok(())
     }
@@ -96,19 +104,12 @@ impl LocalhostBitcoinNode {
         method: &str,
         params: impl ureq::serde::Serialize,
     ) -> Result<serde_json::Value, Error> {
+        debug!("Making Bitcoin RPC {} call...", method);
         let json_rpc =
             ureq::json!({"jsonrpc": "2.0", "id": "stx", "method": method, "params": params});
         let response = ureq::post(&self.bitcoind_api)
             .send_json(json_rpc)
-            .map_err(|e| {
-                let err_str = e.to_string();
-                let error_json = serde_json::json!({ "error": &err_str });
-                let err_obj_opt = match e.into_response() {
-                    Some(r) => r.into_json::<serde_json::Value>().unwrap_or(error_json),
-                    None => error_json,
-                };
-                Error::RPCError(err_obj_opt)
-            })?;
+            .map_err(|e| Error::RPCError(e.to_string()))?;
         let json_response = response.into_json::<serde_json::Value>()?;
         let json_result = json_response
             .get("result")
@@ -148,11 +149,11 @@ impl LocalhostBitcoinNode {
 
     fn import_address(&self, address: &BitcoinAddress) -> Result<(), Error> {
         let address = address.to_string();
+        debug!("Importing address {}...", address);
         let label = "";
         let rescan = true;
         let p2sh = false;
         let params = (address, label, rescan, p2sh);
-        debug!("Importing address..");
         self.call("importaddress", params)?;
         Ok(())
     }

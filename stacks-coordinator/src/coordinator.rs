@@ -244,12 +244,6 @@ impl StacksCoordinator {
 impl TryFrom<Config> for StacksCoordinator {
     type Error = Error;
     fn try_from(mut config: Config) -> Result<Self> {
-        let local_stacks_node = NodeClient::new(&config.stacks_node_rpc_url);
-        let local_bitcoin_node = LocalhostBitcoinNode::new(config.bitcoin_node_rpc_url.clone());
-        // If a user has not specified a start block height, begin from the current burn block height by default
-        let burn_block_height = local_stacks_node.burn_block_height()?;
-        config.start_block_height = config.start_block_height.or(Some(burn_block_height));
-
         // Determine what network we are running on
         let (version, bitcoin_network) = match config.network.as_ref().unwrap_or(&Network::Mainnet)
         {
@@ -274,6 +268,12 @@ impl TryFrom<Config> for StacksCoordinator {
         let xonly_pubkey =
             PublicKey::from_slice(&pubkey.x().to_bytes()).map_err(Error::InvalidPublicKey)?;
 
+        let local_stacks_node = NodeClient::new(&config.stacks_node_rpc_url);
+        // If a user has not specified a start block height, begin from the current burn block height by default
+        let burn_block_height = local_stacks_node.burn_block_height()?;
+        config.start_block_height = config.start_block_height.or(Some(burn_block_height));
+
+        // Create the bitcoin and stacks wallets
         let bitcoin_wallet = BitcoinWallet::new(xonly_pubkey, bitcoin_network);
         let stacks_wallet = StacksWallet::new(
             config.sbtc_contract.clone(),
@@ -288,6 +288,9 @@ impl TryFrom<Config> for StacksCoordinator {
         let tx =
             stacks_wallet.build_set_btc_address_transaction(bitcoin_wallet.address(), nonce)?;
         local_stacks_node.broadcast_transaction(&tx)?;
+
+        let local_bitcoin_node = LocalhostBitcoinNode::new(config.bitcoin_node_rpc_url.clone());
+        local_bitcoin_node.load_wallet(bitcoin_wallet.address())?;
 
         let local_fee_wallet = WrapPegWallet {
             bitcoin_wallet,
