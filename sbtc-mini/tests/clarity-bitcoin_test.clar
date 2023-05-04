@@ -2,22 +2,39 @@
 (define-constant zero-address 'SP000000000000000000002Q6VF78)
 
 ;; @name verify segwit transaction where OP_RETURN is in output[1]
+;; arbitrary segwit transaction
 (define-public (test-was-wtx-mined-internal-1)
-  (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
-    u2431087
-    0x0200000000010218f905443202116524547142bd55b69335dfc4e4c66ff3afaaaab6267b557c4b030000000000000000e0dbdf1039321ab7a2626ca5458e766c6107690b1a1923e075c4f691cc4928ac0000000000000000000220a10700000000002200208730dbfaa29c49f00312812aa12a62335113909711deb8da5ecedd14688188363c5f26010000000022512036f4ff452cb82e505436e73d0a8b630041b71e037e5997290ba1fe0ae7f4d8d50140a50417be5a056f63e052294cb20643f83038d5cd90e2f90c1ad3f80180026cb99d78cd4480fadbbc5b9cad5fb2248828fb21549e7cb3f7dbd7aefd2d541bd34f0140acde555b7689eae41d5ccf872bb32a270893bdaa1defc828b76c282f6c87fc387d7d4343c5f7288cfd9aa5da0765c7740ca97e44a0205a1abafa279b530d5fe36d182500
-    0x0000a02065bc9201b5b5a1d695a18e4d5efe5d52d8ccc4129a2499141d000000000000009160ba7ae5f29f9632dc0cd89f466ee64e2dddfde737a40808ddc147cd82406f18b8486488a127199842cec7
-    u3
-    u2
-    (list 0xb2d7ec769ce60ebc0c8fb9cc37f0ad7481690fc176b82c8d17d3c05da80fea6b 0x122f3217765b6e8f3163f6725d4aa3d303e4ffe4b99a5e85fb4ff91a026c17a8)
-    0x15424423c2614c23aceec8d732b5330c21ff3a306f52243fbeef47a192c65c86
-    0x0000000000000000000000000000000000000000000000000000000000000000
-    0x02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff23036f18250418b848644d65726d61696465722046545721010000686d20000000000000ffffffff02edfe250000000000160014c035e789d9efffa10aa92e93f48f29b8cfb224c20000000000000000266a24aa21a9ed260ac9521c6b0c1b09e438319b5cb3377911764f156e44da61b1ab820f75104c00000000
-    (list 0x5f4a8858a112953111d5f94605c4dd8d04690eeeb9ffe2f435475d95943f2f3f 0x3348bf81aae79941662a902206b3ed2d285713668ab134c9e113548daea596fc)
+  (let (
+    (burnchain-block-height u2431087)
+    ;; txid: 3b3a7a31c949048fabf759e670a55ffd5b9472a12e748b684db5d264b6852084
+    (raw-tx 0x0200000000010218f905443202116524547142bd55b69335dfc4e4c66ff3afaaaab6267b557c4b030000000000000000e0dbdf1039321ab7a2626ca5458e766c6107690b1a1923e075c4f691cc4928ac0000000000000000000220a10700000000002200208730dbfaa29c49f00312812aa12a62335113909711deb8da5ecedd14688188363c5f26010000000022512036f4ff452cb82e505436e73d0a8b630041b71e037e5997290ba1fe0ae7f4d8d50140a50417be5a056f63e052294cb20643f83038d5cd90e2f90c1ad3f80180026cb99d78cd4480fadbbc5b9cad5fb2248828fb21549e7cb3f7dbd7aefd2d541bd34f0140acde555b7689eae41d5ccf872bb32a270893bdaa1defc828b76c282f6c87fc387d7d4343c5f7288cfd9aa5da0765c7740ca97e44a0205a1abafa279b530d5fe36d182500)
+    ;; txid: f1bb118d6663640d6571d08ee36ffff78130c0a6a959e69929f952e745e54050
+    (raw-coinbase-tx 0x02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff23036f18250418b848644d65726d61696465722046545721010000686d20000000000000ffffffff02edfe250000000000160014c035e789d9efffa10aa92e93f48f29b8cfb224c20000000000000000266a24aa21a9ed260ac9521c6b0c1b09e438319b5cb3377911764f156e44da61b1ab820f75104c00000000)
+    ;; block id: 000000000000000606f86a5bc8fb6e38b16050fb4676dea26cba5222583c4d86
+    (raw-block-header 0x0000a02065bc9201b5b5a1d695a18e4d5efe5d52d8ccc4129a2499141d000000000000009160ba7ae5f29f9632dc0cd89f466ee64e2dddfde737a40808ddc147cd82406f18b8486488a127199842cec7)
+    (witness-merkle-root 0x15424423c2614c23aceec8d732b5330c21ff3a306f52243fbeef47a192c65c86)
+    (witness-reserved-data 0x0000000000000000000000000000000000000000000000000000000000000000)
+    (parsed-block-header (contract-call? .clarity-bitcoin parse-block-header raw-block-header))
+    (parsed-tx (contract-call? .clarity-bitcoin parse-wtx raw-tx))
+    (parsed-coinbase-tx (contract-call? .clarity-bitcoin parse-tx raw-tx))
+  )
+    (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
+      burnchain-block-height
+      raw-tx
+      raw-block-header
+      u3
+      u2
+      (list 0xb2d7ec769ce60ebc0c8fb9cc37f0ad7481690fc176b82c8d17d3c05da80fea6b 0x122f3217765b6e8f3163f6725d4aa3d303e4ffe4b99a5e85fb4ff91a026c17a8)
+      witness-merkle-root
+      witness-reserved-data
+      raw-coinbase-tx
+      (list 0x5f4a8858a112953111d5f94605c4dd8d04690eeeb9ffe2f435475d95943f2f3f 0x3348bf81aae79941662a902206b3ed2d285713668ab134c9e113548daea596fc)
+    )
   )
 )
 
 ;; @name verify segwit transaction where OP_RETURN is in output[0]
+;; arbitrary segwit transaction
 (define-public (test-was-wtx-mined-internal-2)
   (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
     u2431459
@@ -35,6 +52,7 @@
 
 
 ;; @name verify segwit transaction where OP_RETURN is in output[0]
+;; arbitrary segwit transaction
 (define-public (test-was-wtx-mined-internal-3)
   (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
     u2431567
@@ -51,6 +69,7 @@
 )
 
 ;; @name verify segwit transaction where there is only the coinbase transaction. should fail
+;; arbitrary segwit transaction
 (define-public (test-was-wtx-mined-internal-4)
   (match (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
     u2431619
@@ -70,6 +89,7 @@
 )
 
 ;; @name OP_RETURN is too large. Fails to parse segwit transaction
+;; arbitrary segwit transaction
 (define-public (test-was-wtx-mined-internal-5)
   (match (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
     u2430921
