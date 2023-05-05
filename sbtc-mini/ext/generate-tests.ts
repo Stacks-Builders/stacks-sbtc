@@ -14,21 +14,21 @@ function isTestContract(contractName: string) {
 }
 
 const functionRegex = /^([ \t]{0,};;[ \t]{0,}@[\s\S]+?)\n[ \t]{0,}\(define-public[\s]+\((.+?)[ \t|)]/gm;
-const metadataRegex = /^;;[ \t]{1,}@([a-z-]+)(?:$|[ \t]+?(.+?))$/;
+const annotationsRegex = /^;;[ \t]{1,}@([a-z-]+)(?:$|[ \t]+?(.+?))$/;
 
-function extractTestMetadata(contractSource: string) {
-	const functionMeta = {};
+function extractTestAnnotations(contractSource: string) {
+	const functionAnnotations = {};
 	const matches = contractSource.replace(/\r/g, "").matchAll(functionRegex);
 	for (const [, comments, functionName] of matches) {
-		functionMeta[functionName] = {};
+		functionAnnotations[functionName] = {};
 		const lines = comments.split("\n");
 		for (const line of lines) {
-			const [, prop, value] = line.match(metadataRegex) || [];
+			const [, prop, value] = line.match(annotationsRegex) || [];
 			if (prop)
-				functionMeta[functionName][prop] = value ?? true;
+				functionAnnotations[functionName][prop] = value ?? true;
 		}
 	}
-	return functionMeta;
+	return functionAnnotations;
 }
 
 Clarinet.run({
@@ -43,13 +43,13 @@ Clarinet.run({
 			const hasDefaultPrepareFunction = contract.contract_interface.functions.reduce(
 				(a, v) => a || (v.name === 'prepare' && v.access === 'public' && v.args.length === 0),
 				false);
-			const meta = extractTestMetadata(contract.source);
+			const annotations = extractTestAnnotations(contract.source);
 
 			const code: string[][] = [];
 			code.push([
 				warningText,
 				``,
-				`import { Clarinet, Tx, Chain, Account, types, assertEquals, bootstrap } from './deps.ts';`,
+				`import { Clarinet, Tx, Chain, Account, types, assertEquals, printEvents, bootstrap } from './deps.ts';`,
 				``
 			]);
 
@@ -58,12 +58,12 @@ Clarinet.run({
 					continue;
 				if (args.length > 0)
 					throw new Error(`Test functions cannot take arguments. (Offending function: ${name})`);
-				const functionMeta = meta[name] || {};
-				if (hasDefaultPrepareFunction && !functionMeta.prepare)
-					functionMeta.prepare = 'prepare';
-				if (functionMeta['no-prepare'])
-					delete functionMeta.prepare;
-				code.push([generateTest(contractId, name, functionMeta)]);
+				const functionAnnotations = annotations[name] || {};
+				if (hasDefaultPrepareFunction && !functionAnnotations.prepare)
+					functionAnnotations.prepare = 'prepare';
+				if (functionAnnotations['no-prepare'])
+					delete functionAnnotations.prepare;
+				code.push([generateTest(contractId, name, functionAnnotations)]);
 			}
 
 			Deno.writeTextFile(`${targetFolder}/${contractName}.ts`, code.flat().join("\n"));
@@ -71,43 +71,47 @@ Clarinet.run({
 	}
 });
 
-type MetaData = { [key: string]: string | boolean };
+type FunctionAnnotations = { [key: string]: string | boolean };
 
-function generatePrepareTx(contractPrincipal: string, meta: MetaData) {
-	return `Tx.contractCall('${contractPrincipal}', '${meta['prepare']}', [], deployer.address)`;
+function generatePrepareTx(contractPrincipal: string, annotations: FunctionAnnotations) {
+	return `Tx.contractCall('${contractPrincipal}', '${annotations['prepare']}', [], deployer.address)`;
 }
 
-function generateNormalMineBlock(contractPrincipal: string, testFunction: string, meta: MetaData) {
+function generateNormalMineBlock(contractPrincipal: string, testFunction: string, annotations: FunctionAnnotations) {
 	return `let block = chain.mineBlock([
-		${meta['prepare'] ? `${generatePrepareTx(contractPrincipal, meta)},` : ''}
+		${annotations['prepare'] ? `${generatePrepareTx(contractPrincipal, annotations)},` : ''}
 		Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)
 	]);`;
 }
 
-function generateSpecialMineBlock(mineBlocksBefore: number, contractPrincipal: string, testFunction: string, meta: MetaData) {
+function generateSpecialMineBlock(mineBlocksBefore: number, contractPrincipal: string, testFunction: string, annotations: FunctionAnnotations) {
 	let code = ``;
-	if (meta['prepare']) {
-		code = `let prepareBlock = chain.mineBlock([${generatePrepareTx(contractPrincipal, meta)}]);
-		prepareBlock.receipts.map(({result}) => result.expectOk());`;
+	if (annotations['prepare']) {
+		code = `let prepareBlock = chain.mineBlock([${generatePrepareTx(contractPrincipal, annotations)}]);
+		prepareBlock.receipts.map(({result}) => result.expectOk());
+		`;
+		if (annotations['print'] === 'events')
+			code += `\n\t\tprintEvents(prepareBlock);\n`;
 	}
 	if (mineBlocksBefore > 1)
 		code += `
 		chain.mineEmptyBlock(${mineBlocksBefore - 1});`;
 	return `${code}
-		let block = chain.mineBlock([Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)]);`;
+		let block = chain.mineBlock([Tx.contractCall('${contractPrincipal}', '${testFunction}', [], callerAddress)]);
+		${annotations['print'] === 'events' ? 'printEvents(block);' : ''}`;
 }
 
-function generateTest(contractPrincipal: string, testFunction: string, meta: MetaData) {
-	const mineBlocksBefore = parseInt(meta['mine-blocks-before'] as string) || 0;
+function generateTest(contractPrincipal: string, testFunction: string, annotations: FunctionAnnotations) {
+	const mineBlocksBefore = parseInt(annotations['mine-blocks-before'] as string) || 0;
 	return `Clarinet.test({
-	name: "${meta.name ? testFunction + ': ' + (meta.name as string).replace(/"/g, '\\"') : testFunction}",
+	name: "${annotations.name ? testFunction + ': ' + (annotations.name as string).replace(/"/g, '\\"') : testFunction}",
 	async fn(chain: Chain, accounts: Map<string, Account>) {
 		const deployer = accounts.get("deployer")!;
 		bootstrap(chain, deployer);
-		let callerAddress = ${meta.caller ? (meta.caller[0] === "'" ? `"${(meta.caller as string).substring(1)}"` : `accounts.get('${meta.caller}')!.address`) : `accounts.get('deployer')!.address`};
+		let callerAddress = ${annotations.caller ? (annotations.caller[0] === "'" ? `"${(annotations.caller as string).substring(1)}"` : `accounts.get('${annotations.caller}')!.address`) : `accounts.get('deployer')!.address`};
 		${mineBlocksBefore >= 1
-			? generateSpecialMineBlock(mineBlocksBefore, contractPrincipal, testFunction, meta)
-			: generateNormalMineBlock(contractPrincipal, testFunction, meta)}
+			? generateSpecialMineBlock(mineBlocksBefore, contractPrincipal, testFunction, annotations)
+			: generateNormalMineBlock(contractPrincipal, testFunction, annotations)}
 		block.receipts.map(({result}) => result.expectOk());
 	}
 });
@@ -117,11 +121,17 @@ function generateTest(contractPrincipal: string, testFunction: string, meta: Met
 function generateDeps() {
 	return `${warningText}
 	
-import { Clarinet, Tx, Chain, Account, types } from 'https://deno.land/x/clarinet@v1.5.4/index.ts';
+import { Clarinet, Tx, Chain, Account, Block, types } from 'https://deno.land/x/clarinet@v1.5.4/index.ts';
 import { assertEquals } from 'https://deno.land/std@0.170.0/testing/asserts.ts';
 
 export { Clarinet, Tx, Chain, types, assertEquals };
 export type { Account };
+
+const dirOptions = {strAbbreviateSize: Infinity, depth: Infinity, colors: true};
+
+export function printEvents(block: Block) {
+	block.receipts.map(({events}) => events && events.map(event => console.log(Deno.inspect(event, dirOptions))));
+}
 
 export const bootstrapContracts = [
 	'.sbtc-token',
