@@ -54,7 +54,7 @@
 	(let (
 		;; check if the tx was mined (todo: segwit wtxid)
 		;; #[filter(tx)]
-		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof ctx cproof)))
+		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
 		;; get the peg out data
 		;; #[filter(ts)]
 		(peg-out-data (try! (extract-request-data tx p2tr-unlock-script)))
@@ -105,7 +105,7 @@
 	(let (
 		;; check if the tx was mined
 		;; #[filter(tx)]
-		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof ctx cproof)))
+		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
 		;; get the fulfilment data
 		;; #[filter(ts)]
 		(fulfilment-data (try! (extract-fulfilment-data tx)))
