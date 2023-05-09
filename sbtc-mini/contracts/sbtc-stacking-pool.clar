@@ -66,6 +66,9 @@
 ;; Current cycle threshold wallet
 (define-data-var threshold-wallet { version: (buff 1), hashbytes: (buff 32) } { version: 0x00, hashbytes: 0x00 })
 
+;; Current signer minimal
+(define-data-var signer-minimal uint u0)
+
 ;;;;;;;;;;;;
 ;;; maps ;;;
 ;;;;;;;;;;;;
@@ -187,6 +190,9 @@
             (current-pre-signer (map-get? pre-signer {stacker: tx-sender, pool: current-cycle}))
             (current-signer (map-get? signer {stacker: tx-sender, pool: current-cycle}))
         )
+
+        ;; To-do
+        ;; Assert that amount-ustx is greater than signer-minimal
 
         ;; Assert signer-allowance-end-height is either none or block-height is less than signer-allowance-end-height
         (asserts! (or 
@@ -357,9 +363,22 @@
                 ;; Update signer map
                 (map-set signer {stacker: tx-sender, pool: next-cycle} (merge next-pool-signer { vote: (some pox-addr) }))
 
-                ;; Update pool map
-
-                ;; still a few to-dos here...
+                ;; Check if 70% wallet consensus has been reached
+                (if (>= (/ (* new-candidate-votes u100) next-pool-signer-stacked) u70)
+                    ;; 70% consensus reached, ready to set next cycle threshold-wallet & attempt to aggregate-commit-index
+                    (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-addr next-cycle))
+                        ;; Okay result, update pool map with last-aggregation (block-height) & reward-index
+                        ok-result
+                            (map-set pool next-cycle (merge
+                                next-pool
+                                {last-aggregation: (some block-height), reward-index: (some ok-result)}
+                            ))
+                        err-result
+                            false
+                    )
+                    ;; 70% consensus not reached, continue
+                    false
+                )
 
             )
         )
