@@ -79,6 +79,8 @@
     stacked: uint,
     threshold-wallet-candidates: (list 100 { version: (buff 1), hashbytes: (buff 32) }),
     threshold-wallet: (optional { version: (buff 1), hashbytes: (buff 32) }),
+    last-aggregation: (optional uint),
+    reward-index: (optional uint)
 })
 
 ;; Map that tracks all stacker/signer data for a given principal & pool (by cycle index)
@@ -305,6 +307,7 @@
             (current-candidate-status (map-get? votes-per-cycle {cycle: next-cycle, wallet-candidate: pox-addr}))
             (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
             (next-threshold-wallet (get threshold-wallet next-pool))
+            (next-pool-total-stacked (get stacked next-pool))
             (next-pool-signer (unwrap! (map-get? signer {stacker: tx-sender, pool: next-cycle}) err-not-signer))
             (next-pool-signer-amount (get amount next-pool-signer))
         )
@@ -349,6 +352,7 @@
                     (unwrapped-candidate (unwrap! current-candidate-status err-unwrapping-candidate))
                     (unwrapped-candidate-votes (get votes-in-ustx unwrapped-candidate))
                     (unwrapped-candidate-num-signer (get num-signer unwrapped-candidate))
+                    (new-candidate-votes (+ (get amount next-pool-signer) (get votes-in-ustx unwrapped-candidate)))
                 )
 
                 ;; Update votes-per-cycle map
@@ -364,7 +368,7 @@
                 (map-set signer {stacker: tx-sender, pool: next-cycle} (merge next-pool-signer { vote: (some pox-addr) }))
 
                 ;; Check if 70% wallet consensus has been reached
-                (if (>= (/ (* new-candidate-votes u100) next-pool-signer-stacked) u70)
+                (if (>= (/ (* new-candidate-votes u100) next-pool-total-stacked) u70)
                     ;; 70% consensus reached, ready to set next cycle threshold-wallet & attempt to aggregate-commit-index
                     (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-addr next-cycle))
                         ;; Okay result, update pool map with last-aggregation (block-height) & reward-index

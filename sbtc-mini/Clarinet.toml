@@ -15,6 +15,16 @@ path = 'contracts/clarity-bitcoin.clar'
 clarity_version = 2
 epoch = 2.1
 
+[contracts.clarity-bitcoin_test]
+path = 'tests/clarity-bitcoin_test.clar'
+clarity_version = 2
+epoch = 2.1
+
+[contracts.sbtc-stacking-pool_test]
+path = 'tests/sbtc-stacking-pool_test.clar'
+clarity_version = 2
+epoch = 2.1
+
 [contracts.sbtc-btc-tx-helper]
 path = 'contracts/sbtc-btc-tx-helper.clar'
 clarity_version = 2
@@ -25,8 +35,18 @@ path = 'contracts/sbtc-controller.clar'
 clarity_version = 2
 epoch = 2.1
 
+[contracts.sbtc-controller_test]
+path = 'tests/sbtc-controller_test.clar'
+clarity_version = 2
+epoch = 2.1
+
 [contracts.sbtc-peg-in-processor]
 path = 'contracts/sbtc-peg-in-processor.clar'
+clarity_version = 2
+epoch = 2.1
+
+[contracts.sbtc-peg-in-processor_test]
+path = 'tests/sbtc-peg-in-processor_test.clar'
 clarity_version = 2
 epoch = 2.1
 
@@ -37,6 +57,11 @@ epoch = 2.1
 
 [contracts.sbtc-registry]
 path = 'contracts/sbtc-registry.clar'
+clarity_version = 2
+epoch = 2.1
+
+[contracts.sbtc-registry_test]
+path = 'tests/sbtc-registry_test.clar'
 clarity_version = 2
 epoch = 2.1
 
@@ -55,36 +80,15 @@ path = 'contracts/sbtc-token.clar'
 clarity_version = 2
 epoch = 2.1
 
-[contracts.sbtc-wallet-vote]
-path = 'contracts/sbtc-wallet-vote.clar'
-clarity_version = 2
-epoch = 2.1
-
-[contracts.sbtc-controller_test]
-path = 'tests/sbtc-controller_test.clar'
-clarity_version = 2
-epoch = 2.1
-
-[contracts.clarity-bitcoin_test]
-path = 'tests/clarity-bitcoin_test.clar'
-clarity_version = 2
-epoch = 2.1
-
 [contracts.sbtc-token_test]
 path = 'tests/sbtc-token_test.clar'
 clarity_version = 2
 epoch = 2.1
 
-[contracts.sbtc-registry_test]
-path = 'tests/sbtc-registry_test.clar'
+[contracts.sbtc-wallet-vote]
+path = 'contracts/sbtc-wallet-vote.clar'
 clarity_version = 2
 epoch = 2.1
-
-[contracts.sbtc-peg-in-processor_test]
-path = 'tests/sbtc-peg-in-processor_test.clar'
-clarity_version = 2
-epoch = 2.1
-
 [repl.analysis]
 passes = ['check_checker']
 
