@@ -110,12 +110,13 @@ should return an `ok`, otherwise the test fails.
 You can add certain comment annotations before unit test functions to add
 information or modify behaviour. Annotations are optional.
 
-| Annotation    | Description                                                                                                                                  |
-|---------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| `@name`       | Give the unit test a name, this text shows up when running unit tests.                                                                       |
-| `@no-prepare` | Do not call the `prepare` function before running this unit test.                                                                            |
-| `@prepare`    | Override the default `prepare` function with another. The function name should follow the tag.                                               |
-| `@caller`     | Override the default caller when running this unit test. Either specify an account name or standard principal prefixed by a single tick `'`. |
+| Annotation            | Description                                                                                                                                  |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `@name`               | Give the unit test a name, this text shows up when running unit tests.                                                                       |
+| `@no-prepare`         | Do not call the `prepare` function before running this unit test.                                                                            |
+| `@prepare`            | Override the default `prepare` function with another. The function name should follow the tag.                                               |
+| `@caller`             | Override the default caller when running this unit test. Either specify an account name or standard principal prefixed by a single tick `'`. |
+| `@mine-blocks-before` | Mine a number of blocks before running the test. The number of blocks should follow the tag.                                                 |
 
 Examples:
 
@@ -145,4 +146,8 @@ Examples:
 ;; @name This test will be called with tx-sender set to the specified principal.
 ;; @caller 'ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG
 (define-public (test-five) (ok true))
+
+;; @name Five blocks are mined before this test is executed.
+;; @mine-blocks-before 5
+(define-public (test-six) (ok true))
 ```
