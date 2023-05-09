@@ -142,7 +142,7 @@
     (let 
         (
             ;; to-do -> (get-peg-state) from .sbtc-controller, returns bool
-            (peg-state true)
+            (peg-state (contract-call? .sbtc-registry current-peg-state))
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
             (current-cycle-burn-height (contract-call? 'SP000000000000000000002Q6VF78.pox-2 reward-cycle-to-burn-height current-cycle))
             (next-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
@@ -153,21 +153,20 @@
             (start-penalty-window (- next-cycle-burn-height normal-penalty-period-len))
         )
 
-        (if peg-state
-            (if (< latest-disbursed-burn-height burn-block-height)
-                (if (and (> burn-block-height latest-disbursed-burn-height) (< burn-block-height start-voting-window))
-                    "registration"
-                    (if (and (>= burn-block-height start-voting-window) (< burn-block-height start-transfer-window))
-                        "voting"
-                        (if (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window))
-                            "transfer"
-                            "penalty"
-                        )
+        (asserts! peg-state "bad-peg")
+
+        (if (< latest-disbursed-burn-height burn-block-height)
+            (if (and (> burn-block-height latest-disbursed-burn-height) (< burn-block-height start-voting-window))
+                "registration"
+                (if (and (>= burn-block-height start-voting-window) (< burn-block-height start-transfer-window))
+                    "voting"
+                    (if (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window))
+                        "transfer"
+                        "penalty"
                     )
                 )
-                "disbursement"
             )
-            "bad-peg"
+            "disbursement"
         )
     )
 )
@@ -313,7 +312,7 @@
         )
 
         ;; Assert we're in a good-peg state
-        (asserts! (contract-call? .sbtc-controller current-peg-state) err-not-in-good-peg-state)
+        (asserts! (contract-call? .sbtc-registry current-peg-state) err-not-in-good-peg-state)
 
         ;; Assert we're in the voting window
         (asserts! (is-eq (get-current-window) "voting") err-voting-period-closed)

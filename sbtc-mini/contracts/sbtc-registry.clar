@@ -20,6 +20,8 @@
 (define-map peg-wallets-cycle { version: (buff 1), hashbytes: (buff 32) } uint)
 (define-data-var peg-out-request-nonce uint u0)
 
+(define-data-var peg-state bool true)
+
 (define-data-var peg-out-requests-pending uint u0)
 (define-map peg-out-requests uint
 	{
@@ -32,6 +34,10 @@
 	})
 
 (define-map peg-out-request-state uint (buff 1))
+
+(define-read-only (current-peg-state)
+	(var-get peg-state)
+)
 
 (define-read-only (is-protocol-caller (who principal))
 	(contract-call? .sbtc-controller is-protocol-caller contract-caller)

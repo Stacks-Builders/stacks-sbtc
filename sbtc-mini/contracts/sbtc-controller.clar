@@ -13,7 +13,7 @@
 ;;; variables ;;;
 ;;;;;;;;;;;;;;;;;
 
-(define-data-var peg-state bool true)
+
 
 ;;;;;;;;;;;;
 ;;; maps ;;;
@@ -30,10 +30,6 @@
 
 (define-read-only (is-protocol-caller (who principal))
 	(ok (asserts! (default-to false (map-get? privileged-protocol-principals who)) err-unauthorised))
-)
-
-(define-read-only (current-peg-state)
-	(var-get peg-state)
 )
 
 
