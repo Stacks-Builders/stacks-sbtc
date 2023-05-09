@@ -9,12 +9,24 @@
 (define-constant mock-peg-wallet { version: 0x01, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699 })
 (define-constant mock-peg-cycle u1)
 
+;; WIF private key cVqZm6SNztZsZC75wAhmkewxxhCehq2QL7S8irdyWuBeyWAp21cj
+;; hex private key f6588520e266c8ec43672fc97aa23a173831cd89be50823c7dca629b566d26b3
+;; address bcrt1q5s4azffap92uc3qvujetg9ksgja424ef2hrsr5
+;; address hash160 a42bd1253d0955cc440ce4b2b416d044bb555729
+
 ;; [stacks pubkey, 33 bytes] OP_DROP [33 bytes] [33 bytes]
 ;; 03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9 (wallet-1 pubkey)
 ;; OP_DROP
 ;; 02fcba7ecf41bc7e1be4ee122d9d22e3333671eb0a3a87b5cdf099d59874e1940f
 ;; 02744b79efd72bec6e4cac8db6922a31f27674236dd8896403fb150aa112faf2b8
 (define-constant mock-unlock-script-1 0x2103cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9752102fcba7ecf41bc7e1be4ee122d9d22e3333671eb0a3a87b5cdf099d59874e1940f2102744b79efd72bec6e4cac8db6922a31f27674236dd8896403fb150aa112faf2b8)
+
+;; createrawtransaction '[{"txid":"0000000000000000000000000000000000000000000000000000000000000000", "vout":0,"sequence":0}]' '[{"data":"03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9"}, {"bcrt1q5s4azffap92uc3qvujetg9ksgja424ef2hrsr5": 1.2}]'
+(define-constant mock-op-return-tx-1 0x02000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000236a2103cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9000e270700000000160014a42bd1253d0955cc440ce4b2b416d044bb55572900000000)
+
+(define-read-only (get-sbtc-balance (who principal))
+	(unwrap! (contract-call? .sbtc-token get-balance who) u0)
+)
 
 (define-public (prepare-add-test-to-protocol)
 	(contract-call? .sbtc-testnet-debug-controller set-protocol-contract (as-contract tx-sender) true)
@@ -81,7 +93,7 @@
 
 ;; @mine-blocks-before 5
 ;; @print events
-(define-public (test-peg-in)
+(define-public (test-peg-in-reveal)
 	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
 			mock-peg-cycle ;; burn-height
 			0x11 ;; tx
@@ -93,7 +105,28 @@
 			0x55 ;; ctx
 			(list 0x55 0x66) ;; cproof
 			)))
-		(unwrap! result (err {err: "Expect ok, got err", actual: result}))
+		(unwrap! result (err {err: "Expect ok, got err", actual: (some result)}))
+		(asserts! (is-eq (get-sbtc-balance wallet-1) u100) (err {err: "User did not receive the expected sBTC", actual: none}))
+		(ok true)
+	)
+)
+
+;; @mine-blocks-before 5
+;; @print events
+(define-public (test-peg-in-op-return)
+	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
+			mock-peg-cycle ;; burn-height
+			mock-op-return-tx-1 ;; tx
+			0x ;; p2tr-unlock-script
+			0x22 ;; header
+			u1 ;; tx-index
+			u1 ;; tree-depth
+			(list 0x33 0x44) ;; wproof
+			0x55 ;; ctx
+			(list 0x55 0x66) ;; cproof
+			)))
+		(unwrap! result (err {err: "Expect ok, got err", actual: (some result)}))
+		(asserts! (is-eq (get-sbtc-balance wallet-1) u100) (err {err: "User did not receive the expected sBTC", actual: none}))
 		(ok true)
 	)
 )

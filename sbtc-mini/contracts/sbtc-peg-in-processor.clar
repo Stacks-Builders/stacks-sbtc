@@ -1,7 +1,10 @@
+(define-constant OP_RETURN 0x6a)
+
 (define-constant err-peg-in-expired (err u500))
 (define-constant err-not-a-peg-wallet (err u501))
 (define-constant err-sequence-length-invalid (err u502))
 (define-constant err-stacks-pubkey-invalid (err u503))
+(define-constant err-op-return-not-found (err u504))
 
 (define-data-var minimum-peg-in-amount uint u1000000) ;; 0.01 BTC
 
@@ -33,6 +36,28 @@
 
 ;; --- Public functions
 
+(define-private (match-op-return (script (optional (buff 128))))
+	(ok true)
+)
+
+(define-read-only (extract-op-return (tx (buff 4096)))
+	;; TODO
+	(let (
+		(info (unwrap! (contract-call? .clarity-bitcoin parse-tx (try! (as-max-len? tx u1024))) none))
+		(outs (get outs info))
+		)
+		(match (get scriptPubKey (element-at? outs u0)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u1)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u2)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u3)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u4)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u5)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u6)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		(match (get scriptPubKey (element-at? outs u7)) script (asserts! (not (is-eq (element-at? script u0) (some OP_RETURN))) (some script)) false)
+		none
+	)
+)
+
 ;; It appears the current wire format of a peg-in is as follows:
 ;; unlock script: [stacks pubkey, 33 bytes] OP_DROP [wallet pubkey, 33 bytes] [p2wpkh pub key, 33 bytes]
 ;; OP_RETURN    : OP_RETURN [stacks pubkey, 33 bytes]
@@ -50,7 +75,11 @@
 	;; (is-eq (len p2tr-unlock-script) u0)
 
 	(ok {
-		recipient: (try! (extract-principal p2tr-unlock-script u1)), ;; skip length byte
+		recipient:
+			(if (is-eq (len p2tr-unlock-script) u0) ;; find OP_RETURN if unlock script is empty
+				(try! (extract-principal (unwrap! (extract-op-return tx) err-op-return-not-found) u2)) ;; skip OP_RETURN and length byte
+				(try! (extract-principal p2tr-unlock-script u1)) ;; skip length byte
+			),
 		value: u100,
 		expiry-burn-height: (+ burn-block-height u10),
 		peg-wallet: { version: 0x01, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699}
@@ -73,7 +102,8 @@
 	)
 	(let (
 		;; check if the tx was mined
-		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
+		;;(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
+		(burn-wtxid (sha256 tx))
 		;; extract data from the tx
 		(peg-in-data (try! (extract-data tx p2tr-unlock-script)))
 		)
