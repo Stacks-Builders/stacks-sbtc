@@ -340,18 +340,29 @@
           nbits: (get uint32 parsed-nbits),
           nonce: (get uint32 parsed-nonce)})))
 
+;; (define-read-only (get-bc-h-hash (bh uint))
+;;   (get-burn-block-info? header-hash bh))
+
+;; MOCK section
+(define-constant DEBUG-MODE true)
+
+(define-map mock-burnchain-header-hashes uint (buff 32))
+
+(define-public (mock-add-burnchain-block-header-hash (burn-height uint) (hash (buff 32)))
+ (ok (map-set mock-burnchain-header-hashes burn-height hash))
+)
+
 (define-read-only (get-bc-h-hash (bh uint))
-  (get-burn-block-info? header-hash bh))
+   (if DEBUG-MODE (map-get? mock-burnchain-header-hashes bh) (get-burn-block-info? header-hash bh)))
+
+;; END MOCK section
 
 ;; Verify that a block header hashes to a burnchain header hash at a given height.
 ;; Returns true if so; false if not.
 (define-read-only (verify-block-header (headerbuff (buff 80)) (expected-block-height uint))
-    (match (get-bc-h-hash expected-block-height)
-        bhh (is-eq bhh (reverse-buff32 (sha256 (sha256 headerbuff))))
-        false))
-
-(define-read-only (verify-block-header-test (headerbuff (buff 80)) (expected-block-height uint))
-  true
+  (match (get-bc-h-hash expected-block-height)
+      bhh (is-eq bhh (reverse-buff32 (sha256 (sha256 headerbuff))))
+      false)
 )
 
 ;; Get the txid of a transaction, but little-endian.
@@ -454,7 +465,7 @@
 	;; because they converge at some point
 	)
   (begin
-    (asserts! (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth })) (err u11))
+    (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth }))
     (let (
       (parsed-ctx (try! (parse-tx ctx)))
       (witness-out (get-commitment-scriptPubKey (get outs parsed-ctx)))
@@ -492,7 +503,7 @@
 ;; Verify block header and merkle proof
 ;; This function must only called with the merkle root of the provided header
 (define-private (was-tx-mined-internal (height uint) (tx (buff 1024)) (header (buff 80)) (merkle-root (buff 32)) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
-  (if (verify-block-header-test header height)
+  (if (verify-block-header header height)
       (begin
         (if (is-eq merkle-root (get-txid tx))
           (ok true)
