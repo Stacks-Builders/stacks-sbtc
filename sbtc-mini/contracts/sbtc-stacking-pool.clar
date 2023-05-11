@@ -17,20 +17,15 @@
 ;;;;;;;;;;;;;;;;;
 ;;; constants ;;;
 ;;;;;;;;;;;;;;;;;
+
 ;; state as "normal" suggesting that the pool is operating as expected / wasn't in a "bad state"
 (define-constant normal-cycle-len u2016)
 (define-constant normal-voting-period-len u300)
 (define-constant normal-transfer-period-len u100)
 (define-constant normal-penalty-period-len u100)
 
-;; Same burnchain and PoX constants as mainnet
-(define-data-var first-burn-block-height uint u666050)
-(define-data-var reward-cycle-len uint u2100)
-;; Relative burnchain block heights (between 0 and 2100) as to when the system transitions into different states
-(define-data-var registration-window-rel-end uint u1600)
-(define-data-var voting-window-rel-end uint u1900)
-(define-data-var transfer-window-rel-end uint u2000)
-(define-data-var penalty-window-rel-end uint u2100)
+;; Burn POX address for penalizing stackers/signers
+(define-constant POX-burn-address { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699})
 
 ;;;;;;;;;;;;;;
 ;;; errors ;;;
@@ -55,6 +50,10 @@
 (define-constant err-unwrapping-candidate (err u17))
 (define-constant err-pool-cycle (err u18))
 (define-constant err-too-many-candidates (err u19))
+(define-constant err-not-in-transfer-window (err u20))
+(define-constant err-unhandled-request (err u21))
+(define-constant err-invalid-penalty-type (err u22))
+
 
 ;;;;;;;;;;;;;;;;;
 ;;; variables ;;;
@@ -68,6 +67,15 @@
 
 ;; Current signer minimal
 (define-data-var signer-minimal uint u0)
+
+;; Same burnchain and PoX constants as mainnet
+(define-data-var first-burn-block-height uint u666050)
+(define-data-var reward-cycle-len uint u2100)
+;; Relative burnchain block heights (between 0 and 2100) as to when the system transitions into different states
+(define-data-var registration-window-rel-end uint u1600)
+(define-data-var voting-window-rel-end uint u1900)
+(define-data-var transfer-window-rel-end uint u2000)
+(define-data-var penalty-window-rel-end uint u2100)
 
 ;;;;;;;;;;;;
 ;;; maps ;;;
@@ -393,6 +401,56 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;; Private Functions ;;;;;;;
+;;;;;;; Penalty Functions ;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; Penalty function for an unexpired, unhandled request-post-vote
+(define-public (penalty-unhandled-request)
+    (begin
+
+        ;; Assert that we're in the transfer window
+        (asserts! (is-eq (get-current-window) "transfer") err-not-in-transfer-window)
+
+        ;; Assert that pending-wallet-peg-outs is equal to zero
+        (asserts! (is-eq (contract-call? .sbtc-registry get-pending-wallet-peg-outs) u0) err-unhandled-request)
+
+        ;; Change peg-state to "bad-peg" :(
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
+
+    )
+)
+
+;; Penalty function for when a new wallet vote threshold (70%) is not met in time
+(define-public (penalty-vote-threshold)
+    (let
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (next-cycle (+ current-cycle u1))
+            (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
+            (next-pool-total-stacked (get stacked next-pool))
+            (next-pool-signer (unwrap! (map-get? signer {stacker: tx-sender, pool: next-cycle}) err-not-signer))
+            (next-pool-signer-amount (get amount next-pool-signer))
+            (next-pool-threshold-wallet-candidates (get threshold-wallet-candidates next-pool))
+            (next-pool-threshold-wallet-candidates-len (len next-pool-threshold-wallet-candidates))
+            (next-pool-threshold-wallet (get threshold-wallet next-pool))
+        )
+
+        ;; Assert that we're in the transfer window
+        (asserts! (is-eq (get-current-window) "transfer") err-not-in-transfer-window)
+
+        ;; Assert that next-pool-threshold-wallet is-none
+        (asserts! (is-some next-pool-threshold-wallet) err-unhandled-request)
+
+        ;; Assert that pending-wallet-peg-outs is equal to zero
+        (asserts! (is-eq (contract-call? .sbtc-registry get-pending-wallet-peg-outs) u0) err-unhandled-request)
+
+        ;; Penalize stackers by calling delegate-stack-extend & changing POX-reward address to burn address
+        ;; Should we by default only extend by 1 cycle?
+
+        ;; Change peg-state to "bad-peg"
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
+
+    )
+)
+
+;; Penalty function for when a stacker fails to transfer the current peg balance to the next threshold wallet

@@ -5,6 +5,11 @@
 (define-constant peg-out-state-fulfilled 0x01)
 (define-constant peg-out-state-reclaimed 0x02)
 
+;; Types of penalty errors
+(define-constant penalty-unhandled-peg-state-change 0x00)
+(define-constant penalty-new-wallet-consensus-failed 0x01)
+(define-constant penalty-peg-transfer-failed 0x02)
+
 (define-constant err-burn-tx-already-processed (err u600))
 (define-constant err-peg-wallet-already-set (err u602))
 (define-constant err-minimum-burnchain-confirmations-not-reached (err u603))
@@ -92,6 +97,19 @@
 	(var-get peg-out-request-nonce)
 )
 
+(define-read-only (get-pending-wallet-peg-outs)
+	(var-get peg-out-requests-pending)
+)
+
+;; Update peg-state
+(define-public (set-peg-state (state bool))
+	(begin
+		(try! (is-protocol-caller contract-caller))
+		(var-set peg-state state)
+		(ok state)
+	)
+)
+
 ;; #[allow(unchecked_data)]
 (define-public (insert-peg-out-request
 	(value uint)
@@ -125,5 +143,14 @@
 		(var-set peg-out-requests-pending (- (var-get peg-out-requests-pending) u1))
 		(map-set peg-out-request-state id settled-state)
 		(ok request)
+	)
+)
+
+;; Called through the sbtc-stacking-pool contract
+(define-public (penalty-peg-state-change (penalty-type (buff 1)))
+	(begin 
+		(try! (is-protocol-caller contract-caller))
+		;; not sure if additional checks needed
+		(ok (var-set peg-state false))
 	)
 )

@@ -9,6 +9,7 @@
 (define-constant contract-deployer tx-sender)
 (define-constant err-unauthorised (err u401))
 
+
 ;;;;;;;;;;;;;;;;;
 ;;; variables ;;;
 ;;;;;;;;;;;;;;;;;
@@ -45,10 +46,6 @@
 		(ok (map set-protocol-iter protocol-principals))
 	)
 )
-
-;; to-do: add a function to update the peg state (only current pool contract can call this?)
-;; Update Peg State
-;; @desc: Updates the peg state to the value passed in
 
 
 
