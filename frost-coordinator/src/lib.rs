@@ -6,8 +6,7 @@ use frost_signer::{
     net::{HttpNet, HttpNetListen},
 };
 
-pub const DEVNET_COORDINATOR_ID: usize = 0;
-pub const DEVNET_COORDINATOR_DKG_ID: u64 = 0; //TODO: Remove, this is a correlation id
+pub const DEVNET_COORDINATOR_ID: u32 = 0;
 
 pub fn create_coordinator(
     path: impl AsRef<std::path::Path>,
@@ -16,11 +15,6 @@ pub fn create_coordinator(
 
     let net: HttpNet = HttpNet::new(config.http_relay_url.clone());
     let net_listen: HttpNetListen = HttpNetListen::new(net, vec![]);
-
-    Ok(Coordinator::new(
-        DEVNET_COORDINATOR_ID,
-        DEVNET_COORDINATOR_DKG_ID,
-        &config,
-        net_listen,
-    ))
+    let coordinator = Coordinator::new(DEVNET_COORDINATOR_ID, &config, net_listen)?;
+    Ok(coordinator)
 }

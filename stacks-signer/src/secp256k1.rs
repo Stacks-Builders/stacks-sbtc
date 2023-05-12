@@ -1,9 +1,8 @@
 use clap::Args;
-use core::convert::TryFrom;
 use rand_core::OsRng;
 use std::{fs::File, io::prelude::*, path::PathBuf};
-use tracing::{error, info};
-use wtfrost::{Point, Scalar};
+use tracing::info;
+use wsts::Scalar;
 
 #[derive(Args)]
 pub struct Secp256k1 {
@@ -30,18 +29,6 @@ impl Secp256k1 {
             println!("{private_key}");
         }
         Ok(())
-    }
-
-    pub fn generate_public_key(private_key: &str) {
-        match Scalar::try_from(private_key) {
-            Ok(scalar) => {
-                let public_key = Point::from(scalar);
-                println!("{public_key}");
-            }
-            Err(e) => {
-                error!("Failed to parse scalar from {}: {:?}", &private_key, e);
-            }
-        }
     }
 }
 

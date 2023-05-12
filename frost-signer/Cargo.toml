@@ -11,11 +11,12 @@ path = "src/lib.rs"    # The source file of the target.
 crate-type = ["lib"]   # The crate types to generate.
 
 [dependencies]
+aes-gcm = { workspace = true }
 backoff = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
 p256k1 = { workspace = true }
-wtfrost = { workspace = true }
+wsts = { workspace = true }
 hashbrown = { workspace = true }
 itertools = { workspace = true }
 rand_core = { workspace = true }

@@ -26,7 +26,7 @@
 (define-data-var num-keys uint u4000)
 (define-data-var num-signers uint u4000)
 (define-data-var threshold uint u2800)
-(define-data-var bitcoin-wallet-address (optional (string-ascii 72)) none)
+(define-data-var bitcoin-wallet-public-key (optional (buff 33)) none)
 (define-data-var trading-halted bool false)
 
 ;; data maps
@@ -93,10 +93,10 @@
     )
 )
 
-(define-public (set-bitcoin-wallet-address (addr (string-ascii 72)))
+(define-public (set-bitcoin-wallet-public-key (public-key (buff 33)))
     (begin
         (asserts! (is-coordinator) (err err-invalid-caller))
-        (ok (var-set bitcoin-wallet-address (some addr)))
+        (ok (var-set bitcoin-wallet-public-key (some public-key)))
     )
 )
 
@@ -148,8 +148,8 @@
     (var-get trading-halted)
 )
 
-(define-read-only (get-bitcoin-wallet-address)
-    (var-get bitcoin-wallet-address)
+(define-read-only (get-bitcoin-wallet-public-key)
+    (var-get bitcoin-wallet-public-key)
 )
 
 (define-read-only (get-signer-data (signer uint))

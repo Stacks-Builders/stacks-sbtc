@@ -1,19 +1,27 @@
-use crate::signer::Signer as FrostSigner;
-use hashbrown::HashMap;
-use p256k1::ecdsa;
+use hashbrown::{HashMap, HashSet};
+use p256k1::{
+    ecdsa,
+    point::{Compressed, Point},
+    scalar::Scalar,
+};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use tracing::{debug, info};
-pub use wtfrost;
-use wtfrost::{
+use tracing::{debug, info, warn};
+pub use wsts;
+use wsts::{
     common::{PolyCommitment, PublicNonce, SignatureShare},
     traits::Signer as SignerTrait,
-    v1, Scalar,
+    v1,
 };
 
-use crate::state_machine::{Error as StateMachineError, StateMachine, States};
+use crate::{
+    config::SignerKeys,
+    signer::Signer as FrostSigner,
+    state_machine::{Error as StateMachineError, StateMachine, States},
+    util::{decrypt, encrypt, make_shared_secret},
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -22,7 +30,7 @@ pub enum Error {
     #[error("InvalidDkgPublicShare")]
     InvalidDkgPublicShare,
     #[error("InvalidDkgPrivateShares")]
-    InvalidDkgPrivateShares(u32),
+    InvalidDkgPrivateShares(Vec<u32>),
     #[error("InvalidNonceResponse")]
     InvalidNonceResponse,
     #[error("InvalidSignatureShare")]
@@ -66,17 +74,19 @@ pub struct SigningRound {
     pub dkg_public_id: u64,
     pub sign_id: u64,
     pub sign_nonce_id: u64,
-    pub threshold: usize,
-    pub total: usize,
+    pub threshold: u32,
+    pub total: u32,
     pub signer: Signer,
     pub state: States,
     pub commitments: BTreeMap<u32, PolyCommitment>,
-    pub shares: HashMap<usize, HashMap<usize, Scalar>>,
+    pub shares: HashMap<u32, HashMap<u32, Vec<u8>>>,
     pub public_nonces: Vec<PublicNonce>,
+    pub network_private_key: Scalar,
+    pub signer_keys: SignerKeys,
 }
 
 pub struct Signer {
-    pub frost_signer: wtfrost::v1::Signer,
+    pub frost_signer: wsts::v1::Signer,
     pub signer_id: u32,
 }
 
@@ -126,8 +136,6 @@ pub enum MessageTypes {
     DkgPrivateBegin(DkgBegin),
     DkgEnd(DkgEnd),
     DkgPublicEnd(DkgEnd),
-    DkgQuery(DkgQuery),
-    DkgQueryResponse(DkgQueryResponse),
     DkgPublicShare(DkgPublicShare),
     DkgPrivateShares(DkgPrivateShares),
     NonceRequest(NonceRequest),
@@ -160,7 +168,8 @@ impl Signable for DkgPublicShare {
 pub struct DkgPrivateShares {
     pub dkg_id: u64,
     pub key_id: u32,
-    pub private_shares: HashMap<usize, Scalar>,
+    /// Encrypt the shares using AES-GCM with a key derived from ECDH
+    pub private_shares: HashMap<u32, Vec<u8>>,
 }
 
 impl Signable for DkgPrivateShares {
@@ -170,7 +179,7 @@ impl Signable for DkgPrivateShares {
         hasher.update(self.key_id.to_be_bytes());
         for (id, share) in &self.private_shares {
             hasher.update(id.to_be_bytes());
-            hasher.update(share.to_bytes());
+            hasher.update(share);
         }
     }
 }
@@ -190,7 +199,7 @@ impl Signable for DkgBegin {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct DkgEnd {
     pub dkg_id: u64,
-    pub signer_id: usize,
+    pub signer_id: u32,
     pub status: DkgStatus,
 }
 
@@ -199,32 +208,6 @@ impl Signable for DkgEnd {
         hasher.update("DKG_END".as_bytes());
         hasher.update(self.dkg_id.to_be_bytes());
         hasher.update(self.signer_id.to_be_bytes());
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DkgQuery {}
-
-impl Signable for DkgQuery {
-    fn hash(&self, hasher: &mut Sha256) {
-        hasher.update("DKG_QUERY".as_bytes());
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DkgQueryResponse {
-    pub dkg_id: u64,
-    pub public_share: PolyCommitment,
-}
-
-impl Signable for DkgQueryResponse {
-    fn hash(&self, hasher: &mut Sha256) {
-        hasher.update("DKG_QUERY_RESPONSE".as_bytes());
-        hasher.update(self.dkg_id.to_be_bytes());
-        hasher.update(self.public_share.id.id.to_bytes());
-        for a in &self.public_share.A {
-            hasher.update(a.compress().as_bytes());
-        }
     }
 }
 
@@ -323,22 +306,24 @@ impl Signable for SignatureShareResponse {
 
 impl SigningRound {
     pub fn new(
-        threshold: usize,
-        total: usize,
+        threshold: u32,
+        total: u32,
         signer_id: u32,
-        key_ids: Vec<usize>,
+        key_ids: Vec<u32>,
+        network_private_key: Scalar,
+        signer_keys: SignerKeys,
     ) -> SigningRound {
         assert!(threshold <= total);
         let mut rng = OsRng::default();
-        let frost_signer = v1::Signer::new(&key_ids, total, threshold, &mut rng);
+        let frost_signer = v1::Signer::new(signer_id, &key_ids, total, threshold, &mut rng);
         let signer = Signer {
             frost_signer,
             signer_id,
         };
 
         SigningRound {
-            dkg_id: 1,
-            dkg_public_id: 1,
+            dkg_id: 0,
+            dkg_public_id: 0,
             sign_id: 1,
             sign_nonce_id: 1,
             threshold,
@@ -348,12 +333,14 @@ impl SigningRound {
             commitments: BTreeMap::new(),
             shares: HashMap::new(),
             public_nonces: vec![],
+            network_private_key,
+            signer_keys,
         }
     }
 
     fn reset<T: RngCore + CryptoRng>(&mut self, dkg_id: u64, rng: &mut T) {
         self.dkg_id = dkg_id;
-        self.dkg_public_id = 1;
+        self.dkg_public_id = 0;
         self.commitments.clear();
         self.shares.clear();
         self.public_nonces.clear();
@@ -406,7 +393,7 @@ impl SigningRound {
     fn dkg_public_ended(&mut self) -> Result<MessageTypes, Error> {
         let dkg_end = DkgEnd {
             dkg_id: self.dkg_id,
-            signer_id: self.signer.signer_id as usize,
+            signer_id: self.signer.signer_id,
             status: DkgStatus::Success,
         };
         let dkg_end = MessageTypes::DkgPublicEnd(dkg_end);
@@ -420,21 +407,73 @@ impl SigningRound {
     fn dkg_ended(&mut self) -> Result<MessageTypes, Error> {
         let polys: Vec<PolyCommitment> = self.commitments.clone().into_values().collect();
 
-        let dkg_end = match self
-            .signer
-            .frost_signer
-            .compute_secrets(&self.shares, &polys)
-        {
-            Ok(()) => DkgEnd {
+        let mut decrypted_shares = HashMap::new();
+
+        // go through private shares, and decrypt any for owned keys, leaving the rest as zero scalars
+        let key_ids: HashSet<u32> = self.signer.frost_signer.get_key_ids().into_iter().collect();
+        let mut invalid_dkg_private_shares = Vec::new();
+
+        for (src_key_id, encrypted_shares) in &self.shares {
+            let mut decrypted_key_shares = HashMap::new();
+
+            for (dst_key_id, private_share) in encrypted_shares {
+                if key_ids.contains(dst_key_id) {
+                    debug!(
+                        "decrypting dkg private share for key_id #{}",
+                        dst_key_id + 1
+                    );
+                    let compressed =
+                        Compressed::from(self.signer_keys.key_ids[&(src_key_id + 1)].to_bytes());
+                    let src_public_key = Point::try_from(&compressed).unwrap();
+                    let shared_secret =
+                        make_shared_secret(&self.network_private_key, &src_public_key);
+
+                    match decrypt(&shared_secret, private_share) {
+                        Ok(plain) => match Scalar::try_from(&plain[..]) {
+                            Ok(s) => {
+                                decrypted_key_shares.insert(*dst_key_id, s);
+                            }
+                            Err(e) => {
+                                warn!("Failed to parse Scalar for dkg private share from key_id {} to key_id {}: {:?}", src_key_id, dst_key_id, e);
+                                invalid_dkg_private_shares.push(*src_key_id);
+                            }
+                        },
+                        Err(e) => {
+                            warn!("Failed to decrypt dkg private share from key_id {} to key_id {}: {:?}", src_key_id, dst_key_id, e);
+                            invalid_dkg_private_shares.push(*src_key_id);
+                        }
+                    }
+                } else {
+                    decrypted_key_shares.insert(*dst_key_id, Scalar::new());
+                }
+            }
+
+            decrypted_shares.insert(*src_key_id, decrypted_key_shares);
+        }
+
+        let dkg_end = if invalid_dkg_private_shares.is_empty() {
+            match self
+                .signer
+                .frost_signer
+                .compute_secrets(&decrypted_shares, &polys)
+            {
+                Ok(()) => DkgEnd {
+                    dkg_id: self.dkg_id,
+                    signer_id: self.signer.signer_id,
+                    status: DkgStatus::Success,
+                },
+                Err(dkg_error_map) => DkgEnd {
+                    dkg_id: self.dkg_id,
+                    signer_id: self.signer.signer_id,
+                    status: DkgStatus::Failure(format!("{:?}", dkg_error_map)),
+                },
+            }
+        } else {
+            DkgEnd {
                 dkg_id: self.dkg_id,
-                signer_id: self.signer.signer_id as usize,
-                status: DkgStatus::Success,
-            },
-            Err(dkg_error_map) => DkgEnd {
-                dkg_id: self.dkg_id,
-                signer_id: self.signer.signer_id as usize,
-                status: DkgStatus::Failure(format!("{:?}", dkg_error_map)),
-            },
+                signer_id: self.signer.signer_id,
+                status: DkgStatus::Failure(format!("{:?}", invalid_dkg_private_shares)),
+            }
         };
 
         let dkg_end = MessageTypes::DkgEnd(dkg_end);
@@ -451,7 +490,8 @@ impl SigningRound {
             self.state,
             self.commitments.len(),
         );
-        self.state == States::DkgPublicGather && self.commitments.len() == self.total
+        self.state == States::DkgPublicGather
+            && self.commitments.len() == usize::try_from(self.total).unwrap()
     }
 
     fn can_dkg_end(&self) -> bool {
@@ -462,21 +502,15 @@ impl SigningRound {
             self.shares.len()
         );
         self.state == States::DkgPrivateGather
-            && self.commitments.len() == self.total
-            && self.shares.len() == self.total
+            && self.commitments.len() == usize::try_from(self.total).unwrap()
+            && self.shares.len() == usize::try_from(self.total).unwrap()
     }
 
     fn nonce_request(&mut self, nonce_request: NonceRequest) -> Result<Vec<MessageTypes>, Error> {
         let mut rng = OsRng::default();
         let mut msgs = vec![];
         let signer_id = self.signer.signer_id;
-        let key_ids = self
-            .signer
-            .frost_signer
-            .get_key_ids()
-            .iter()
-            .map(|id| *id as u32)
-            .collect();
+        let key_ids = self.signer.frost_signer.get_key_ids();
         let nonces = self.signer.frost_signer.gen_nonces(&mut rng);
 
         let response = NonceResponse {
@@ -508,28 +542,23 @@ impl SigningRound {
         let signer_ids = sign_request
             .nonce_responses
             .iter()
-            .map(|nr| nr.signer_id as usize)
-            .collect::<Vec<usize>>();
+            .map(|nr| nr.signer_id)
+            .collect::<Vec<u32>>();
 
         info!("Got SignatureShareRequest for signer_ids {:?}", signer_ids);
 
         for signer_id in &signer_ids {
-            if *signer_id == self.signer.signer_id as usize {
-                let key_ids: Vec<usize> = sign_request
+            if *signer_id == self.signer.signer_id {
+                let key_ids: Vec<u32> = sign_request
                     .nonce_responses
                     .iter()
-                    .flat_map(|nr| {
-                        nr.key_ids
-                            .iter()
-                            .map(|i| *i as usize)
-                            .collect::<Vec<usize>>()
-                    })
-                    .collect::<Vec<usize>>();
-                let nonces: Vec<PublicNonce> = sign_request
+                    .flat_map(|nr| nr.key_ids.iter().copied())
+                    .collect::<Vec<u32>>();
+                let nonces = sign_request
                     .nonce_responses
                     .iter()
                     .flat_map(|nr| nr.nonces.clone())
-                    .collect();
+                    .collect::<Vec<PublicNonce>>();
                 let signature_shares = self.signer.frost_signer.sign(
                     &sign_request.message,
                     &signer_ids,
@@ -541,7 +570,7 @@ impl SigningRound {
                     dkg_id: sign_request.dkg_id,
                     sign_id: sign_request.sign_id,
                     correlation_id: sign_request.correlation_id,
-                    signer_id: *signer_id as u32,
+                    signer_id: *signer_id,
                     signature_shares,
                 };
 
@@ -600,13 +629,35 @@ impl SigningRound {
     }
 
     fn dkg_private_begin(&mut self) -> Result<Vec<MessageTypes>, Error> {
+        let mut rng = OsRng::default();
         let mut msgs = vec![];
         for (key_id, private_shares) in &self.signer.frost_signer.get_shares() {
-            info!("sending dkg private share for key_id #{}", key_id);
+            info!(
+                "signer {} sending dkg private share for key_id #{}",
+                self.signer.signer_id, key_id
+            );
+            // encrypt each share for the recipient
+            let mut encrypted_shares = HashMap::new();
+
+            for (dst_key_id, private_share) in private_shares {
+                debug!(
+                    "encrypting dkg private share for key_id #{}",
+                    dst_key_id + 1
+                );
+                let compressed =
+                    Compressed::from(self.signer_keys.key_ids[&(dst_key_id + 1)].to_bytes());
+                let dst_public_key = Point::try_from(&compressed).unwrap();
+                let shared_secret = make_shared_secret(&self.network_private_key, &dst_public_key);
+                let encrypted_share =
+                    encrypt(&shared_secret, &private_share.to_bytes(), &mut rng).unwrap();
+
+                encrypted_shares.insert(*dst_key_id, encrypted_share);
+            }
+
             let private_shares = DkgPrivateShares {
                 dkg_id: self.dkg_id,
-                key_id: *key_id as u32,
-                private_shares: private_shares.clone(),
+                key_id: *key_id,
+                private_shares: encrypted_shares,
             };
 
             let private_shares = MessageTypes::DkgPrivateShares(private_shares);
@@ -624,7 +675,7 @@ impl SigningRound {
         self.commitments
             .insert(dkg_public_share.party_id, dkg_public_share.public_share);
         info!(
-            "received party #{} PUBLIC commitments {}/{}",
+            "received key #{} PUBLIC commitments {}/{}",
             dkg_public_share.party_id,
             self.commitments.len(),
             self.total
@@ -637,12 +688,10 @@ impl SigningRound {
         dkg_private_shares: DkgPrivateShares,
     ) -> Result<Vec<MessageTypes>, Error> {
         let shares_clone = dkg_private_shares.private_shares.clone();
-        self.shares.insert(
-            dkg_private_shares.key_id as usize,
-            dkg_private_shares.private_shares,
-        );
+        self.shares
+            .insert(dkg_private_shares.key_id, dkg_private_shares.private_shares);
         info!(
-            "received party #{} PRIVATE shares {}/{} {:?}",
+            "received key #{} PRIVATE shares {}/{} {:?}",
             dkg_private_shares.key_id,
             self.shares.len(),
             self.total,
@@ -655,17 +704,21 @@ impl SigningRound {
 impl From<&FrostSigner> for SigningRound {
     fn from(signer: &FrostSigner) -> Self {
         let signer_id = signer.signer_id;
-        assert!(signer_id > 0 && signer_id as usize <= signer.config.total_signers);
-        let party_ids = vec![(signer_id * 2 - 2) as usize, (signer_id * 2 - 1) as usize]; // make two party_ids based on signer_id
+        assert!(signer_id > 0 && signer_id <= signer.config.total_signers);
+        let party_ids = vec![signer_id * 2 - 2, signer_id * 2 - 1]; // make two party_ids based on signer_id
 
         assert!(signer.config.keys_threshold <= signer.config.total_keys);
         let mut rng = OsRng::default();
         let frost_signer = v1::Signer::new(
+            signer_id,
             &party_ids,
             signer.config.total_keys,
             signer.config.keys_threshold,
             &mut rng,
         );
+
+        let network_private_key = signer.config.network_private_key;
+        let signer_keys = signer.config.signer_keys.clone();
 
         SigningRound {
             dkg_id: 1,
@@ -682,6 +735,8 @@ impl From<&FrostSigner> for SigningRound {
             commitments: BTreeMap::new(),
             shares: HashMap::new(),
             public_nonces: vec![],
+            network_private_key,
+            signer_keys,
         }
     }
 }
@@ -690,7 +745,7 @@ impl From<&FrostSigner> for SigningRound {
 mod test {
     use hashbrown::HashMap;
     use rand_core::{CryptoRng, OsRng, RngCore};
-    use wtfrost::{common::PolyCommitment, schnorr::ID, Scalar};
+    use wsts::{common::PolyCommitment, schnorr::ID, Scalar};
 
     use crate::signing_round::{
         DkgPrivateShares, DkgPublicShare, DkgStatus, MessageTypes, SigningRound,
@@ -706,7 +761,8 @@ mod test {
     #[test]
     fn dkg_public_share() {
         let mut rnd = get_rng();
-        let mut signing_round = SigningRound::new(1, 1, 1, vec![1]);
+        let mut signing_round =
+            SigningRound::new(1, 1, 1, vec![1], Default::default(), Default::default());
         let public_share = DkgPublicShare {
             dkg_id: 0,
             party_id: 0,
@@ -722,13 +778,14 @@ mod test {
 
     #[test]
     fn dkg_private_shares() {
-        let mut signing_round = SigningRound::new(1, 1, 1, vec![1]);
+        let mut signing_round =
+            SigningRound::new(1, 1, 1, vec![1], Default::default(), Default::default());
         let mut private_shares = DkgPrivateShares {
             dkg_id: 0,
             key_id: 0,
             private_shares: HashMap::new(),
         };
-        private_shares.private_shares.insert(1, Scalar::new());
+        private_shares.private_shares.insert(1, Vec::new());
         signing_round.dkg_private_shares(private_shares).unwrap();
         assert_eq!(1, signing_round.shares.len())
     }
@@ -736,7 +793,8 @@ mod test {
     #[test]
     fn public_shares_done() {
         let mut rnd = get_rng();
-        let mut signing_round = SigningRound::new(1, 1, 1, vec![1]);
+        let mut signing_round =
+            SigningRound::new(1, 1, 1, vec![1], Default::default(), Default::default());
         // publich_shares_done starts out as false
         assert_eq!(false, signing_round.public_shares_done());
 
@@ -757,7 +815,8 @@ mod test {
     #[test]
     fn can_dkg_end() {
         let mut rnd = get_rng();
-        let mut signing_round = SigningRound::new(1, 1, 1, vec![1]);
+        let mut signing_round =
+            SigningRound::new(1, 1, 1, vec![1], Default::default(), Default::default());
         // can_dkg_end starts out as false
         assert_eq!(false, signing_round.can_dkg_end());
 
@@ -770,7 +829,7 @@ mod test {
                 A: vec![],
             },
         );
-        let shares: HashMap<usize, Scalar> = HashMap::new();
+        let shares: HashMap<u32, Vec<u8>> = HashMap::new();
         signing_round.shares.insert(1, shares);
 
         // can_dkg_end should be true
@@ -779,7 +838,8 @@ mod test {
 
     #[test]
     fn dkg_ended() {
-        let mut signing_round = SigningRound::new(1, 1, 1, vec![1]);
+        let mut signing_round =
+            SigningRound::new(1, 1, 1, vec![1], Default::default(), Default::default());
         match signing_round.dkg_ended() {
             Ok(dkg_end) => match dkg_end {
                 MessageTypes::DkgEnd(dkg_end) => match dkg_end.status {

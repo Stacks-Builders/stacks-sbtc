@@ -9,7 +9,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base58 = { workspace = true }
+bs58 = { workspace = true }
 blockstack-core = { workspace = true }
 clap = { workspace = true }
 frost-coordinator = { path = "../frost-coordinator" }
@@ -22,7 +22,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
-wtfrost = { workspace = true }
+wsts = { workspace = true }
 bitcoin = { version = "0.29.2", features = ["rand", "bitcoinconsensus"] }
 reqwest = { version = "0.11.14", features = ["blocking", "json"] }
 backoff = { workspace = true }
@@ -32,3 +32,4 @@ ureq.workspace = true
 mockall = { workspace = true }
 rand = "0.8.5"
 hex = "0.4.3"
+test-utils = { path = "../test-utils" }

@@ -9,11 +9,10 @@ use frost_signer::{
         DkgBegin, DkgPublicShare, MessageTypes, NonceRequest, NonceResponse, Signable,
         SignatureShareRequest,
     },
-    util::{parse_public_key, parse_public_keys},
 };
 use hashbrown::HashSet;
 use tracing::{debug, info, warn};
-use wtfrost::{
+use wsts::{
     bip340::{Error as Bip340Error, SchnorrProof},
     common::{PolyCommitment, PublicNonce, Signature, SignatureShare},
     compute,
@@ -21,9 +20,7 @@ use wtfrost::{
     v1, Point, Scalar,
 };
 
-use serde::{Deserialize, Serialize};
-
-pub const DEVNET_COORDINATOR_ID: usize = 0;
+pub const DEVNET_COORDINATOR_ID: u32 = 0;
 pub const DEVNET_COORDINATOR_DKG_ID: u64 = 0; //TODO: Remove, this is a correlation id
 
 #[derive(thiserror::Error, Debug)]
@@ -42,6 +39,8 @@ pub enum Error {
     Timeout,
     #[error("{0}")]
     ConfigError(#[from] ConfigError),
+    #[error("Received invalid signer message.")]
+    InvalidSignerMessage,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -52,36 +51,29 @@ pub enum Command {
     GetAggregatePublicKey,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
 pub struct Coordinator<Network: NetListen> {
     id: u32, // Used for relay coordination
     current_dkg_id: u64,
     current_dkg_public_id: u64,
     current_sign_id: u64,
     current_sign_nonce_id: u64,
-    total_signers: usize, // Assuming the signers cover all id:s in {1, 2, ..., total_signers}
-    total_keys: usize,
-    threshold: usize,
+    total_signers: u32, // Assuming the signers cover all id:s in {1, 2, ..., total_signers}
+    total_keys: u32,
+    threshold: u32,
     network: Network,
     dkg_public_shares: BTreeMap<u32, DkgPublicShare>,
     public_nonces: BTreeMap<u32, NonceResponse>,
     signature_shares: BTreeMap<u32, Vec<SignatureShare>>,
     aggregate_public_key: Point,
     network_private_key: Scalar,
-    signer_public_keys: Vec<String>,
-    key_public_keys: Vec<String>,
-    coordinator_public_key: String,
 }
 
 impl<Network: NetListen> Coordinator<Network> {
-    pub fn new(id: usize, dkg_id: u64, config: &Config, network: Network) -> Self {
-        let network_private_key = Scalar::try_from(config.network_private_key.as_str())
-            .expect("failed to parse network_private_key from config");
-
-        Self {
-            id: id as u32,
-            current_dkg_id: dkg_id,
-            current_dkg_public_id: 1,
+    pub fn new(id: u32, config: &Config, network: Network) -> Result<Self, Error> {
+        Ok(Self {
+            id,
+            current_dkg_id: 0,
+            current_dkg_public_id: 0,
             current_sign_id: 1,
             current_sign_nonce_id: 1,
             total_signers: config.total_signers,
@@ -92,11 +84,8 @@ impl<Network: NetListen> Coordinator<Network> {
             public_nonces: Default::default(),
             aggregate_public_key: Point::default(),
             signature_shares: Default::default(),
-            network_private_key,
-            signer_public_keys: config.signer_public_keys.clone(),
-            key_public_keys: config.key_public_keys.clone(),
-            coordinator_public_key: config.coordinator_public_key.clone(),
-        }
+            network_private_key: config.network_private_key,
+        })
     }
 }
 
@@ -129,6 +118,8 @@ where
     }
 
     pub fn run_distributed_key_generation(&mut self) -> Result<Point, Error> {
+        self.current_dkg_id = self.current_dkg_id.wrapping_add(1);
+        info!("Starting DKG round #{}", self.current_dkg_id);
         self.start_public_shares()?;
         let public_key = self.wait_for_public_shares()?;
         self.start_private_shares()?;
@@ -138,11 +129,9 @@ where
 
     fn start_public_shares(&mut self) -> Result<(), Error> {
         self.dkg_public_shares.clear();
-        self.current_dkg_id += 1;
-        info!("Starting DKG round #{}", self.current_dkg_id);
         info!(
-            "DKG Round #{}: Starting Public Share Distribution",
-            self.current_dkg_id
+            "DKG Round #{}: Starting Public Share Distribution Round #{}",
+            self.current_dkg_id, self.current_dkg_public_id
         );
         let dkg_begin = DkgBegin {
             dkg_id: self.current_dkg_id,
@@ -212,7 +201,7 @@ where
                 }
             }
 
-            if self.public_nonces.len() == self.total_signers {
+            if self.public_nonces.len() == usize::try_from(self.total_signers).unwrap() {
                 debug!("Nonce threshold of {} met.", self.threshold);
                 break;
             }
@@ -228,13 +217,8 @@ where
         let party_ids = self
             .public_nonces
             .values()
-            .flat_map(|pn| {
-                pn.key_ids
-                    .iter()
-                    .map(|id| *id as usize)
-                    .collect::<Vec<usize>>()
-            })
-            .collect::<Vec<usize>>();
+            .flat_map(|pn| pn.key_ids.clone())
+            .collect::<Vec<u32>>();
         let nonces = self
             .public_nonces
             .values()
@@ -397,7 +381,7 @@ where
     }
 
     fn wait_for_public_shares(&mut self) -> Result<Point, Error> {
-        let mut ids_to_await: HashSet<usize> = (1..=self.total_signers).collect();
+        let mut ids_to_await: HashSet<u32> = (1..=self.total_signers).collect();
 
         info!(
             "DKG Round #{}: waiting for Dkg Public Shares from signers {:?}",
@@ -443,7 +427,7 @@ where
     }
 
     fn wait_for_dkg_end(&mut self) -> Result<(), Error> {
-        let mut ids_to_await: HashSet<usize> = (1..=self.total_signers).collect();
+        let mut ids_to_await: HashSet<u32> = (1..=self.total_signers).collect();
         info!(
             "DKG Round #{}: waiting for Dkg End from signers {:?}",
             self.current_dkg_id, ids_to_await
@@ -461,56 +445,13 @@ where
     }
 
     fn wait_for_next_message(&mut self) -> Result<Message, Error> {
-        let signer_public_keys = parse_public_keys(&self.key_public_keys);
-        let key_public_keys = parse_public_keys(&self.key_public_keys);
-        let coordinator_public_key = parse_public_key(&self.coordinator_public_key);
-
         let get_next_message = || {
             self.network.poll(self.id);
-            match self
-                .network
+            // We only ever receive already verified messages. No need to check result.
+            self.network
                 .next_message()
                 .ok_or_else(|| "No message yet".to_owned())
                 .map_err(backoff::Error::transient)
-            {
-                Ok(m) => {
-                    match &m.msg {
-                        MessageTypes::DkgBegin(msg) | MessageTypes::DkgPrivateBegin(msg) => {
-                            assert!(msg.verify(&m.sig, &coordinator_public_key))
-                        }
-                        MessageTypes::DkgEnd(msg) | MessageTypes::DkgPublicEnd(msg) => {
-                            assert!(msg.verify(&m.sig, &signer_public_keys[msg.signer_id - 1]))
-                        }
-                        MessageTypes::DkgPublicShare(msg) => {
-                            assert!(msg.verify(&m.sig, &key_public_keys[msg.party_id as usize - 1]))
-                        }
-                        MessageTypes::DkgPrivateShares(msg) => {
-                            assert!(msg.verify(&m.sig, &key_public_keys[msg.key_id as usize]))
-                        }
-                        MessageTypes::DkgQuery(msg) => {
-                            assert!(msg.verify(&m.sig, &coordinator_public_key))
-                        }
-                        MessageTypes::DkgQueryResponse(msg) => {
-                            let key_id = msg.public_share.id.id.get_u32();
-                            assert!(msg.verify(&m.sig, &key_public_keys[key_id as usize - 1]))
-                        }
-                        MessageTypes::NonceRequest(msg) => {
-                            assert!(msg.verify(&m.sig, &coordinator_public_key))
-                        }
-                        MessageTypes::NonceResponse(msg) => {
-                            assert!(msg.verify(&m.sig, &signer_public_keys[msg.signer_id as usize]))
-                        }
-                        MessageTypes::SignShareRequest(msg) => {
-                            assert!(msg.verify(&m.sig, &coordinator_public_key))
-                        }
-                        MessageTypes::SignShareResponse(msg) => {
-                            assert!(msg.verify(&m.sig, &signer_public_keys[msg.signer_id as usize]))
-                        }
-                    }
-                    Ok(m)
-                }
-                Err(e) => Err(e),
-            }
         };
 
         let notify = |_err, dur| {
@@ -522,5 +463,52 @@ where
             .with_max_interval(Duration::from_millis(128))
             .build();
         backoff::retry_notify(backoff_timer, get_next_message, notify).map_err(|_| Error::Timeout)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use hashbrown::HashMap;
+    use test_utils::Process;
+
+    #[test]
+    fn integration_test() {
+        let bin = if cfg!(debug_assertions) {
+            "../target/debug"
+        } else {
+            "../target/release"
+        };
+
+        let log_info: HashMap<String, String> =
+            HashMap::from([("RUST_LOG".to_string(), "info".to_string())]);
+
+        let _relay_server = Process::new(&format!("{bin}/relay-server"), &[], &HashMap::new());
+        let _signer1 = Process::new(
+            &format!("{bin}/frost-signer"),
+            &["--id", "1", "--config", "../frost-signer/conf/signer.toml"],
+            &HashMap::new(),
+        );
+        let _signer2 = Process::new(
+            &format!("{bin}/frost-signer"),
+            &["--id", "2", "--config", "../frost-signer/conf/signer.toml"],
+            &HashMap::new(),
+        );
+        let _signer3 = Process::new(
+            &format!("{bin}/frost-signer"),
+            &["--id", "3", "--config", "../frost-signer/conf/signer.toml"],
+            &HashMap::new(),
+        );
+        let mut coordinator = Process::new(
+            &format!("{bin}/frost-coordinator"),
+            &["--config", "../frost-signer/conf/signer.toml", "dkg-sign"],
+            &log_info,
+        );
+
+        let exit_status = coordinator
+            .child
+            .wait()
+            .expect("Failed to wait for coordinator");
+
+        assert!(exit_status.success());
     }
 }

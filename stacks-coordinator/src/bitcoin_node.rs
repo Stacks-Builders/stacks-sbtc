@@ -1,9 +1,16 @@
-use bitcoin::{consensus::Encodable, hashes::hex::ToHex, Address as BitcoinAddress};
+use std::{io::Cursor, str::FromStr};
+
+use bitcoin::{
+    consensus::Encodable,
+    hashes::{hex::ToHex, sha256d::Hash},
+    Address as BitcoinAddress, Txid,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::{debug, warn};
 pub trait BitcoinNode {
     /// Broadcast the BTC transaction to the bitcoin node
-    fn broadcast_transaction(&self, tx: &BitcoinTransaction) -> Result<(), Error>;
+    fn broadcast_transaction(&self, tx: &BitcoinTransaction) -> Result<Txid, Error>;
     /// Load the Bitcoin wallet from the given address
     fn load_wallet(&self, address: &BitcoinAddress) -> Result<(), Error>;
     /// Get all utxos from the given address
@@ -22,10 +29,12 @@ pub enum Error {
     InvalidResponseJSON(String),
     #[error("Invalid utxo: {0}")]
     InvalidUTXO(String),
+    #[error("Invalid transaction hash")]
+    InvalidTxHash,
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Eq)]
 pub struct UTXO {
     pub txid: String,
     pub vout: u32,
@@ -54,13 +63,22 @@ pub struct LocalhostBitcoinNode {
 }
 
 impl BitcoinNode for LocalhostBitcoinNode {
-    fn broadcast_transaction(&self, tx: &BitcoinTransaction) -> Result<(), Error> {
-        let mut writer = std::io::Cursor::new(vec![]);
+    fn broadcast_transaction(&self, tx: &BitcoinTransaction) -> Result<Txid, Error> {
+        let mut writer = Cursor::new(vec![]);
         tx.consensus_encode(&mut writer)?;
         let raw_tx = writer.into_inner().to_hex();
 
-        self.call("sendrawtransaction", vec![raw_tx])?;
-        Ok(())
+        let result = self
+            .call("sendrawtransaction", vec![raw_tx])?
+            .as_str()
+            .ok_or(Error::InvalidResponseJSON(
+                "No transaction hash in sendrawtransaction response".to_string(),
+            ))?
+            .to_string();
+
+        Ok(Txid::from_hash(
+            Hash::from_str(&result).map_err(|_| Error::InvalidTxHash)?,
+        ))
     }
 
     fn load_wallet(&self, address: &BitcoinAddress) -> Result<(), Error> {
@@ -80,16 +98,24 @@ impl BitcoinNode for LocalhostBitcoinNode {
     /// List the UTXOs filtered on a given address.
     fn list_unspent(&self, address: &BitcoinAddress) -> Result<Vec<UTXO>, Error> {
         // Construct the params using defaults found at https://developer.bitcoin.org/reference/rpc/listunspent.html?highlight=listunspent
-        let addresses = vec![address.to_string()];
+        let addresses: Vec<String> = vec![address.to_string()];
         let min_conf = 0i64;
         let max_conf = 9999999i64;
         let params = (min_conf, max_conf, addresses);
 
         let response = self.call("listunspent", params)?;
+
         // Convert the response to a vector of unspent transactions
-        let outputs = serde_json::from_value::<Vec<UTXO>>(response)
-            .map_err(|e| Error::InvalidResponseJSON(e.to_string()))?;
-        Ok(outputs)
+        let result: Result<Vec<UTXO>, Error> = response
+            .as_array()
+            .ok_or(Error::InvalidResponseJSON(
+                "Listunspent response is not an array".to_string(),
+            ))?
+            .iter()
+            .map(Self::raw_to_utxo)
+            .collect();
+
+        result
     }
 }
 
@@ -156,5 +182,107 @@ impl LocalhostBitcoinNode {
         let params = (address, label, rescan, p2sh);
         self.call("importaddress", params)?;
         Ok(())
+    }
+
+    fn raw_to_utxo(raw: &Value) -> Result<UTXO, Error> {
+        Ok(UTXO {
+            txid: raw["txid"]
+                .as_str()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse txid".to_string(),
+                ))?
+                .to_string(),
+            vout: raw["vout"].as_u64().ok_or(Error::InvalidResponseJSON(
+                "Could not parse vout".to_string(),
+            ))? as u32,
+            address: raw["address"]
+                .as_str()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse address".to_string(),
+                ))?
+                .to_string(),
+            label: raw["label"]
+                .as_str()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse label".to_string(),
+                ))?
+                .to_string(),
+            scriptPubKey: raw["scriptPubKey"]
+                .as_str()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse scriptPubKey".to_string(),
+                ))?
+                .to_string(),
+            amount: raw["amount"].as_f64().map(|amount| amount as u64).ok_or(
+                Error::InvalidResponseJSON("Could not parse amount".to_string()),
+            )?,
+            confirmations: raw["confirmations"]
+                .as_u64()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse confirmations".to_string(),
+                ))?,
+            redeemScript: "".to_string(),
+            witnessScript: "".to_string(),
+            spendable: raw["spendable"]
+                .as_bool()
+                .ok_or(Error::InvalidResponseJSON(
+                    "Could not parse spendable".to_string(),
+                ))?,
+            solvable: raw["solvable"].as_bool().ok_or(Error::InvalidResponseJSON(
+                "Could not parse solvable".to_string(),
+            ))?,
+            reused: false,
+            desc: "".to_string(),
+            safe: raw["safe"].as_bool().ok_or(Error::InvalidResponseJSON(
+                "Could not parse safe".to_string(),
+            ))?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn should_map_json_to_utxo() {
+        let value = json!({
+            "address": "bcrt1qykqup0h6ry9x3c89llzpznrvm9nfd7fqwnt0hu",
+            "amount": 50.00000000,
+            "confirmations": 123,
+            "label": "",
+            "parent_descs": [],
+            "safe": true,
+            "scriptPubKey": "00142581c0befa190a68e0e5ffc4114c6cd96696f920",
+            "solvable": false,
+            "spendable": false,
+            "txid": "19b7fb5fd6dc25b76aeedb812b7fdc7bf8fac343913706c8b39d23ef7375860c",
+            "vout": 0,
+        });
+
+        let res = LocalhostBitcoinNode::raw_to_utxo(&value).unwrap();
+
+        assert_eq!(
+            res,
+            UTXO {
+                txid: "19b7fb5fd6dc25b76aeedb812b7fdc7bf8fac343913706c8b39d23ef7375860c"
+                    .to_string(),
+                vout: 0,
+                address: "bcrt1qykqup0h6ry9x3c89llzpznrvm9nfd7fqwnt0hu".to_string(),
+                label: "".to_string(),
+                scriptPubKey: "00142581c0befa190a68e0e5ffc4114c6cd96696f920".to_string(),
+                amount: 50,
+                confirmations: 123,
+                redeemScript: "".to_string(),
+                witnessScript: "".to_string(),
+                spendable: false,
+                solvable: false,
+                reused: false,
+                desc: "".to_string(),
+                safe: true,
+            }
+        );
     }
 }

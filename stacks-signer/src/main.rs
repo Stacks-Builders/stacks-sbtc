@@ -2,9 +2,9 @@ use clap::Parser;
 use frost_signer::config::Config;
 use frost_signer::logging;
 use stacks_signer::cli::{Cli, Command};
-use stacks_signer::secp256k1::Secp256k1;
 use stacks_signer::signer::Signer;
 use tracing::info;
+use wsts::Point;
 
 fn main() {
     let cli = Cli::parse();
@@ -36,7 +36,8 @@ fn main() {
         }
         Command::PublicKey { config } => match Config::from_path(&config) {
             Ok(config) => {
-                Secp256k1::generate_public_key(&config.network_private_key);
+                let public_key = Point::from(&config.network_private_key);
+                println!("{public_key}")
             }
             Err(e) => {
                 panic!("An error occurred reading config file {}: {}", config, e);
