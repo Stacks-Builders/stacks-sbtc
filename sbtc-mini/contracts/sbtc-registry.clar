@@ -110,6 +110,9 @@
 ;; protocol function calling into this function needs
 ;; to make sure the transaction reverts if anything
 ;; goes wrong.
+;; TODO: do we want to abstract settled states out
+;;       and make the list of accepted states
+;;       updatable?
 ;; #[allow(unchecked_data)]
 (define-public (get-and-settle-pending-peg-out-request (id uint) (settled-state (buff 1)))
 	(let ((request (unwrap! (map-get? peg-out-requests id) err-unknown-peg-out-request)))
