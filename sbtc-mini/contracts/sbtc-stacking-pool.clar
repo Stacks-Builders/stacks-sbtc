@@ -9,6 +9,12 @@
 ;; voting lifecycle
 ;; 1. When sbtc-mini-controller signals that voting period is active, stackers call (vote ...) to submit and/or vote on a shared derived wallet address
 
+;; to-discuss
+;; when is signer-minimal updated? by whom?
+;; how to check entire output has been consumed?
+;; is there a chance that rewards arrive before peg has been transferred?
+;; what's stopping a signer in n-1 
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Cons, Vars & Maps ;;;;;
@@ -25,7 +31,7 @@
 (define-constant normal-penalty-period-len u100)
 
 ;; Burn POX address for penalizing stackers/signers
-(define-constant POX-burn-address { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699})
+(define-constant pox-burn-address { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699})
 
 ;;;;;;;;;;;;;;
 ;;; errors ;;;
@@ -180,6 +186,10 @@
 )
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;; Disbursement Functions ;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Registration Functions ;;;;;
@@ -200,8 +210,8 @@
             (current-signer (map-get? signer {stacker: tx-sender, pool: current-cycle}))
         )
 
-        ;; To-do
         ;; Assert that amount-ustx is greater than signer-minimal
+        (asserts! (>= amount-ustx (var-get signer-minimal)) err-not-enough-stacked)
 
         ;; Assert signer-allowance-end-height is either none or block-height is less than signer-allowance-end-height
         (asserts! (or 
@@ -399,6 +409,28 @@
 )
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;; Transfer Functions ;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Transfer function for proving that current/soon-to-be-old signers have transferred the peg balance to the next threshold-wallet
+(define-public (prove-balance-was-transferred (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
+    (let 
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
+            (current-threshold-wallet (get threshold-wallet current-pool))
+        )
+        (
+            ;; Assert we're in the transfer window
+
+            ;; Assert that unwrapped receiver addresss is equal to current-threshold-wallet
+
+            ;; Assert that entire utxo output has been consumed / is empty
+            (ok true)
+        )
+    )
+)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;; Penalty Functions ;;;;;;;
@@ -406,13 +438,29 @@
 
 ;; Penalty function for an unexpired, unhandled request-post-vote
 (define-public (penalty-unhandled-request)
-    (begin
+    (let
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
+            (current-pool-stackers (get stackers current-pool))
+        )
 
         ;; Assert that we're in the transfer window
         (asserts! (is-eq (get-current-window) "transfer") err-not-in-transfer-window)
 
         ;; Assert that pending-wallet-peg-outs is equal to zero
-        (asserts! (is-eq (contract-call? .sbtc-registry get-pending-wallet-peg-outs) u0) err-unhandled-request)
+        (asserts! (> (contract-call? .sbtc-registry get-pending-wallet-peg-outs) u1) err-unhandled-request)
+
+        ;; Penalize stackers by re-stacking but with a pox-reward address of burn address
+        (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-burn-address next-cycle))
+            ok-result
+                (map-set pool next-cycle (merge
+                    next-pool
+                    {last-aggregation: (some block-height), reward-index: (some ok-result)}
+                ))
+            err-result
+                false
+        )
 
         ;; Change peg-state to "bad-peg" :(
         (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
@@ -425,14 +473,8 @@
     (let
         (
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
-            (next-cycle (+ current-cycle u1))
-            (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
-            (next-pool-total-stacked (get stacked next-pool))
-            (next-pool-signer (unwrap! (map-get? signer {stacker: tx-sender, pool: next-cycle}) err-not-signer))
-            (next-pool-signer-amount (get amount next-pool-signer))
-            (next-pool-threshold-wallet-candidates (get threshold-wallet-candidates next-pool))
-            (next-pool-threshold-wallet-candidates-len (len next-pool-threshold-wallet-candidates))
-            (next-pool-threshold-wallet (get threshold-wallet next-pool))
+            (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
+            (current-pool-stackers (get stackers current-pool))
         )
 
         ;; Assert that we're in the transfer window
@@ -444,8 +486,16 @@
         ;; Assert that pending-wallet-peg-outs is equal to zero
         (asserts! (is-eq (contract-call? .sbtc-registry get-pending-wallet-peg-outs) u0) err-unhandled-request)
 
-        ;; Penalize stackers by calling delegate-stack-extend & changing POX-reward address to burn address
-        ;; Should we by default only extend by 1 cycle?
+        ;; Penalize stackers by re-stacking but with a pox-reward address of burn address
+        (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-burn-address next-cycle))
+            ok-result
+                (map-set pool next-cycle (merge
+                    next-pool
+                    {last-aggregation: (some block-height), reward-index: (some ok-result)}
+                ))
+            err-result
+                false
+        )
 
         ;; Change peg-state to "bad-peg"
         (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
@@ -454,3 +504,33 @@
 )
 
 ;; Penalty function for when a stacker fails to transfer the current peg balance to the next threshold wallet
+;; Stuck on how to handle this since we don't know the current peg balance? 
+;; Actually balance might not matter as long as it's entirely consumed
+;; Is there *any* chance of an overlap between the transfer window & pox rewards? (don't think so)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;; Disburse Functions ;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Disburse function for signers in (n - 1) to verify that their pox-rewards have been disbursed
+(define-public (prove-previous-rewards-were-disbursed (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
+    (let 
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (previous-cycle (- current-cycle u1))
+            (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
+            (previous-threshold-wallet (get threshold-wallet previous-pool))
+        )
+        (
+            ;; Assert we're in the disbursement window
+
+            ;; Assert that rewards haven't already been disbursed
+
+            ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
+
+            ;; Assert that entire utxo output has been consumed / is empty
+            (ok true)
+        )
+    )
+)

@@ -11,6 +11,7 @@
 ;;   2.a. Any observer can verify transfer with a call to .sbtc contracts with the Bitcoin txid of the transfer transaction
 ;;   This will mark a succesful transfer window & the current pool is moved to the audit/penalty window
 
+;; Handoff Reclaim/Penalty -> On BTC/STX
 ;; 3. The transaction is NOT consumed & the pegged-BTC is NOT transferred to the new threshold-wallet (n+1)
 
 ;; Need a voting receipt  
