@@ -8,7 +8,7 @@ rm -fR contracts/*.clar
 docker run -v `pwd`:/home ghcr.io/prompteco/clariform --format=spread --output-dir "contracts-spread" contracts-backup/*.clar
 cp -R contracts-spread/contracts-backup/* contracts
 clarinet test --coverage .coverage/lcov.info .test
-rm -fR contracts/*.clar
+sudo rm -fR contracts/*.clar
 cp -R contracts-backup/*.clar contracts
-rm -fR contracts-backup
-rm -fR contracts-spread
+sudo rm -fR contracts-backup
+sudo rm -fR contracts-spread
