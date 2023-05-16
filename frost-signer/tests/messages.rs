@@ -1,7 +1,7 @@
 use frost_signer::signing_round::{
     DkgBegin, MessageTypes, NonceResponse, SignatureShareRequest, SigningRound,
 };
-use wtfrost::common::PublicNonce;
+use wsts::common::PublicNonce;
 
 #[ignore]
 fn setup_signer(_total: usize, _threshold: usize) -> SigningRound {
@@ -24,7 +24,10 @@ fn dkg_begin() {
     assert_eq!(msgs.len(), total);
 
     // part of the DKG_BEGIN process is to fill the commitments array
-    assert_eq!(signer.commitments.len(), signer.total);
+    assert_eq!(
+        signer.commitments.len(),
+        usize::try_from(signer.total).unwrap()
+    );
 }
 
 #[ignore]

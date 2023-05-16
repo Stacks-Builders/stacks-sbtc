@@ -58,22 +58,17 @@ gantt
         Retrieve Config Options from Contract  :i5, 2023-04-06, 2d
         Integration testing     :i6, after i2, 7d
 
-    section P-12
-        Registration Clarity Smart Contract  :j1, 2023-04-17, 7d
+    section P-XX
+        Peg-Out Clarity Contract for Request and Fullfilment 157  :j1, 2023-04-17, 14d
+        Asset Clarity Contract 279 :j2, 2023-04-17, 14d
+        Add segwit to Bitcoin Clarity Library 253 :j3, 2023-04-17, 14d
 
-    section P-13
-        Disbursement Clarity Smart Contract  :j1, 2023-04-17, 7d
-
-    section P-15
-        Peg-in Clarity Smart Contract  :k1, after j1, 7d  
-
-    section P-17
-        Peg-out Request Clarity Smart Contract  :k1, after j1, 7d  
-        
-    section P-18
-        Peg-out Fulfillment Clarity Smart Contract  :k1, after j1, 7d  
-
-
+    section P-XX2
+        Peg Transfer Clarity Contract 161 :k1, after j3, 14d
+        Controller Clarity Contract 153 :k2, after j3, 14d
+        Peg-In Clarity Smart Contract and API 156 :k3, after j3, 14d
+        Clarity Decentralized Stacking Pool 278 :k4, after j3, 14d
+        Format Clarity to have 1 Line per Exec Branch 305 :k5, after j3, 14d
 ```
 
 

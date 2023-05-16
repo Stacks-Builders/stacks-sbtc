@@ -16,7 +16,7 @@ use std::sync::{
 };
 use std::{thread, time};
 use tracing::debug;
-use wtfrost::{bip340::SchnorrProof, common::Signature};
+use wsts::{bip340::SchnorrProof, common::Signature};
 
 use crate::bitcoin_wallet::BitcoinWallet;
 use crate::config::{Config, Network};

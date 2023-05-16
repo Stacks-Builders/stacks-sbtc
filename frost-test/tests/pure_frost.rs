@@ -1,7 +1,7 @@
 use rand_core::OsRng;
-use wtfrost::bip340::test_helpers::{dkg, sign};
-use wtfrost::bip340::SchnorrProof;
-use wtfrost::v1::{self, SignatureAggregator};
+use wsts::bip340::test_helpers::{dkg, sign};
+use wsts::bip340::SchnorrProof;
+use wsts::v1::{self, SignatureAggregator};
 
 #[test]
 #[allow(non_snake_case)]
@@ -10,9 +10,9 @@ fn pure_frost_test() {
     let N = 4;
     let mut rng = OsRng::default();
     let mut signers = [
-        v1::Signer::new(&[0, 1], N, T, &mut rng),
-        v1::Signer::new(&[2], N, T, &mut rng),
-        v1::Signer::new(&[3], N, T, &mut rng),
+        v1::Signer::new(1, &[0, 1], N, T, &mut rng),
+        v1::Signer::new(2, &[2], N, T, &mut rng),
+        v1::Signer::new(3, &[3], N, T, &mut rng),
     ];
 
     // DKG (Distributed Key Generation)

@@ -7,10 +7,9 @@ use bitcoin::{
     XOnlyPublicKey,
 };
 use rand_core::OsRng;
-use test_utils::BitcoinProcess;
-use ureq::serde_json::Value;
-use wtfrost::common::PolyCommitment;
-use wtfrost::{
+use test_utils::{mine_and_get_coinbase_txid, BitcoinProcess};
+use wsts::common::PolyCommitment;
+use wsts::{
     bip340::{
         test_helpers::{dkg, sign},
         Error as Bip340Error, SchnorrProof,
@@ -18,13 +17,6 @@ use wtfrost::{
     v1::{self, SignatureAggregator},
     Point,
 };
-
-fn mine(btcd: &BitcoinProcess, public_key_bytes: &[u8; 33]) -> Value {
-    let public_key = bitcoin::PublicKey::from_slice(public_key_bytes).unwrap();
-    let address = bitcoin::Address::p2wpkh(&public_key, bitcoin::Network::Regtest).unwrap();
-
-    btcd.rpc("generatetoaddress", (128, address.to_string()))
-}
 
 #[test]
 fn blog_post() {
@@ -125,9 +117,9 @@ fn frost_btc() {
     let total = 4;
     let mut rng = OsRng::default();
     let mut signers = [
-        v1::Signer::new(&[0, 1], total, threshold, &mut rng),
-        v1::Signer::new(&[2], total, threshold, &mut rng),
-        v1::Signer::new(&[3], total, threshold, &mut rng),
+        v1::Signer::new(1, &[0, 1], total, threshold, &mut rng),
+        v1::Signer::new(2, &[2], total, threshold, &mut rng),
+        v1::Signer::new(3, &[3], total, threshold, &mut rng),
     ];
     let secp = bitcoin::secp256k1::Secp256k1::new();
 
@@ -139,7 +131,7 @@ fn frost_btc() {
         bitcoin::PublicKey::from_slice(&group_public_key.compress().as_bytes()).unwrap();
 
     // bitcoind regtest
-    let btc = BitcoinProcess::new();
+    let btcd = BitcoinProcess::new();
 
     // create user keys
     let user_secret_key = bitcoin::secp256k1::SecretKey::new(&mut rand::thread_rng());
@@ -159,22 +151,12 @@ fn frost_btc() {
     );
 
     // mine block to create btc
-    let result = mine(&btc, &user_public_key.serialize().try_into().unwrap());
-    let block_id = result
-        .as_array()
-        .unwrap()
-        .first()
-        .unwrap()
-        .as_str()
-        .unwrap();
+    let (txid, block_id) = mine_and_get_coinbase_txid(&btcd, &user_address);
     println!("mined block_id {:?}", block_id);
-    let result = btc.rpc("getblock", [block_id]);
-    let block = result.as_object().unwrap();
-    let txid = block.get("tx").unwrap().get(0).unwrap().as_str().unwrap();
     println!("mined txid {:?}", txid);
-    let result = btc.rpc("getrawtransaction", (txid, false, block_id));
+    let result = btcd.rpc("getrawtransaction", (txid.to_string(), false, block_id));
     let user_funding_transaction_bytes_hex = result.as_str().unwrap();
-    let _ = btc.rpc(
+    let _ = btcd.rpc(
         "decoderawtransaction",
         [&user_funding_transaction_bytes_hex],
     );
@@ -246,9 +228,9 @@ fn frost_btc() {
             .collect::<Vec<_>>()
     );
     let peg_in_bytes_hex = hex::encode(&peg_in_bytes);
-    let _ = btc.rpc("decoderawtransaction", [&peg_in_bytes_hex]);
+    let _ = btcd.rpc("decoderawtransaction", [&peg_in_bytes_hex]);
     println!("peg-in tx bytes {}", peg_in_bytes_hex);
-    let peg_in_result_value = btc.rpc("sendrawtransaction", [&peg_in_bytes_hex]);
+    let peg_in_result_value = btcd.rpc("sendrawtransaction", [&peg_in_bytes_hex]);
     assert!(peg_in_result_value.is_string(), "{}", peg_in_result_value);
 
     let peg_in_utxo = &peg_in.output[1];
@@ -308,7 +290,7 @@ fn frost_btc() {
 
     println!("peg-out tx bytes {}", &peg_out_bytes_hex);
 
-    let peg_out_result_value = btc.rpc("sendrawtransaction", [&peg_out_bytes_hex]);
+    let peg_out_result_value = btcd.rpc("sendrawtransaction", [&peg_out_bytes_hex]);
     assert!(peg_out_result_value.is_string(), "{}", peg_out_result_value);
 }
 
@@ -384,8 +366,8 @@ fn build_peg_out(satoshis: u64, user_address: bitcoin::PublicKey, utxo: OutPoint
 
 fn signing_round(
     message: &[u8],
-    threshold: usize,
-    total: usize,
+    threshold: u32,
+    total: u32,
     rng: &mut OsRng,
     signers: &mut [v1::Signer; 3],
     public_commitments: Vec<PolyCommitment>,
@@ -403,10 +385,7 @@ fn signing_round(
     SchnorrProof::new(&sig)
 }
 
-fn dkg_round(
-    rng: &mut OsRng,
-    signers: &mut [v1::Signer; 3],
-) -> (Vec<PolyCommitment>, wtfrost::Point) {
+fn dkg_round(rng: &mut OsRng, signers: &mut [v1::Signer; 3]) -> (Vec<PolyCommitment>, wsts::Point) {
     let polys = dkg(signers, rng).unwrap();
     let pubkey = polys.iter().fold(Point::new(), |s, poly| s + poly.A[0]);
     (polys, pubkey)

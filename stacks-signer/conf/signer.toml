@@ -1,9 +1,10 @@
 http_relay_url = "http://localhost:9776"
-total_signers = 3
-total_keys = 6
 keys_threshold = 4
 frost_state_file = "frost.state.bin"
 network_private_key = "9aSCCR6eirt1NAHwJtSz4HMwBHTyMo62SyPMvVDt5DQn"
-signer_public_keys = ["22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj" ]
-key_public_keys = ["22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj" ]
+signers =  [
+    {public_key = "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", key_ids = [1, 2]},
+    {public_key = "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", key_ids = [3, 4]},
+    {public_key = "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj", key_ids = [5, 6]}
+]
 coordinator_public_key = "22Rm48xUdpuTuva5gz9S7yDaaw9f8sjMcPSTHYVzPLNcj"

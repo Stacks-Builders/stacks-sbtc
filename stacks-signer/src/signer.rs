@@ -1,9 +1,7 @@
-use serde::Deserialize;
-
 use frost_signer::config::Config;
 use frost_signer::signer::{Error as SignerError, Signer as FrostSigner};
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone)]
 pub struct Signer {
     frost_signer: FrostSigner,
     //TODO: Are there any StacksSigner specific items or maybe a stacks signer specific config that needs to be wrapped around Config?
