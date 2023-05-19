@@ -63,7 +63,7 @@
 	(match transaction unwrapped (some (sha256 (sha256 unwrapped))) none)
 )
 
-(define-read-only (calculate-merkle-branch?	 (left (optional (buff 32))) (right (optional (buff 32))))
+(define-read-only (calculate-merkle-branch? (left (optional (buff 32))) (right (optional (buff 32))))
 	(match left inner-left
 		(match right inner-right (some (sha256 (sha256 (concat inner-left inner-right)))) left)
 		right
@@ -115,8 +115,14 @@
 )
 
 ;; TODO
-(define-read-only (generate-segwit-coinbase-transaction)
-	0x00
+(define-read-only (generate-segwit-coinbase-transaction-input (segwit-root-hash (buff 32)) (witness-reserved-data (buff 32)))
+	(concat
+		;;32 bytes zero txid---------------------------------------------|out idx|l|
+		0x0000000000000000000000000000000000000000000000000000000000000000ffffffff26
+	(concat
+		(generate-segwit-commit-structure segwit-root-hash witness-reserved-data)
+		0xffffffff ;; sequence
+	))
 )
 
 (define-read-only (generate-segwit-commit-structure (segwit-root-hash (buff 32)) (witness-reserved-data (buff 32)))
@@ -127,22 +133,22 @@
 )
 
 ;; TODO
-(define-public (simulate-mine-solo-burnchain-block-segwit (burn-height uint) (segwit-transactions (list 3 (buff 4096))))
-	(contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash burn-height
-		(reverse-buff32 (calculate-solo-burnchain-header-hash
-			(unwrap! (calculate-merkle-branch?
-				(calculate-merkle-branch?
-					(calculate-internal-txid? (some (generate-segwit-coinbase-transaction)))
-					(calculate-internal-txid? (element-at? segwit-transactions u0))
-				)
-				(calculate-merkle-branch?
-					(calculate-internal-txid? (element-at? segwit-transactions u1))
-					(calculate-internal-txid? (element-at? segwit-transactions u2))
-				)
-			) err-no-transactions)
-		)
-	))
-)
+;; (define-public (simulate-mine-solo-burnchain-block-segwit (burn-height uint) (segwit-transactions (list 3 (buff 4096))))
+;; 	(contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash burn-height
+;; 		(reverse-buff32 (calculate-solo-burnchain-header-hash
+;; 			(unwrap! (calculate-merkle-branch?
+;; 				(calculate-merkle-branch?
+;; 					(calculate-internal-txid? (some (generate-segwit-coinbase-transaction)))
+;; 					(calculate-internal-txid? (element-at? segwit-transactions u0))
+;; 				)
+;; 				(calculate-merkle-branch?
+;; 					(calculate-internal-txid? (element-at? segwit-transactions u1))
+;; 					(calculate-internal-txid? (element-at? segwit-transactions u2))
+;; 				)
+;; 			) err-no-transactions)
+;; 		)
+;; 	))
+;; )
 
 ;; Some test vectors:
 

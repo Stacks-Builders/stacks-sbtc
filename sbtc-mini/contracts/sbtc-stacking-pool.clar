@@ -304,7 +304,7 @@
         )
 
         ;; Assert we're in a good-peg state
-        (asserts! (contract-call? .sbtc-controller current-peg-state) err-not-in-good-peg-state)
+        ;;(asserts! (contract-call? .sbtc-controller current-peg-state) err-not-in-good-peg-state)
 
         ;; Assert we're in the voting window
         (asserts! (is-eq (get-current-window) "voting") err-voting-period-closed)

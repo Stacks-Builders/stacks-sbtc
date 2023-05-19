@@ -186,6 +186,28 @@
   )
 )
 
+;; @name Check if parse-wtx correctly decodes a peg-in reveal transaction
+(define-public (test-parse-wtx-peg-in-reveal-tx)
+  (let (
+      (actual (unwrap! (contract-call? .clarity-bitcoin parse-wtx 0x02000000000101bc3ef1d3826d9432f400840bbfc91931e47cf4aa592821326294c1f1d8cb245b0100000000fdffffff010065cd1d00000000160014bfbe43457367d8acd108dcf1a8ca195ba6ba4ba90340000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f3c183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac41c01dae61a4a8f841952be3a511502d4f56e889ffa0685aa0098773ea2d4309f62474708f439116be919de13c6d3200d2305fcbdf5a9e7d2c079e85b427bb110e9000000000) (err {actual: none, expected: none})))
+      (expected {
+        version: u2,
+        segwit-marker: u0,
+        segwit-version: u1,
+        ins: (list { outpoint: { hash: 0x5b24cbd8f1c1946232212859aaf47ce43119c9bf0b8400f432946d82d3f13ebc, index: u1 }, scriptSig: 0x, sequence: u4294967293 }),
+        outs: (list { value: u500000000, scriptPubKey: 0x0014bfbe43457367d8acd108dcf1a8ca195ba6ba4ba9 }),
+        witnesses: (list (list 
+          0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f
+          0x183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac
+          0xc01dae61a4a8f841952be3a511502d4f56e889ffa0685aa0098773ea2d4309f62474708f439116be919de13c6d3200d2305fcbdf5a9e7d2c079e85b427bb110e90
+          )),
+        locktime: u0
+      })
+    )
+    (ok (asserts! (is-eq expected actual) (err {expected: (some expected), actual: (some actual)})))
+  )
+)
+
 (define-constant ERR-OUT-OF-BOUNDS u1)
 (define-constant ERR-TOO-MANY-TXINS u2)
 (define-constant ERR-TOO-MANY-TXOUTS u3)
