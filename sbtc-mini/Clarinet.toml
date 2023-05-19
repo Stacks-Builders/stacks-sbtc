@@ -20,6 +20,11 @@ path = 'tests/clarity-bitcoin_test.clar'
 clarity_version = 2
 epoch = 2.1
 
+[contracts.pox-2]
+path = 'contracts/pox-2.clar'
+clarity_version = 2
+epoch = 2.1
+
 [contracts.sbtc-btc-tx-helper]
 path = 'contracts/sbtc-btc-tx-helper.clar'
 clarity_version = 2

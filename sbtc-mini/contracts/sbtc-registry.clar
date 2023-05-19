@@ -147,7 +147,7 @@
 )
 
 ;; Called through the sbtc-stacking-pool contract
-(define-public (penalty-peg-state-change (penalty-type (buff 1)))
+(define-public (penalty-peg-state-change)
 	(begin 
 		(try! (is-protocol-caller contract-caller))
 		;; not sure if additional checks needed

@@ -151,6 +151,23 @@
     )
 )
 
+;; Get signer in cycle
+(define-read-only (get-signer-in-cycle (signer-principal principal) (cycle uint))
+    (let 
+        (
+            (current-signer (default-to {
+                amount: u0,
+                pox-addr: { version: 0x00, hashbytes: 0x00 },
+                vote: none,
+                public-key: 0x00,
+                lock-period: u0,
+                btc-earned: none
+            } (map-get? signer {stacker: signer-principal, pool: cycle})))
+        )
+        (ok (get public-key current-signer))
+    )
+)
+
 ;; Get current window
 (define-read-only (get-current-window)
     (let 
@@ -421,14 +438,14 @@
             (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
             (current-threshold-wallet (get threshold-wallet current-pool))
         )
-        (
+        
             ;; Assert we're in the transfer window
 
             ;; Assert that unwrapped receiver addresss is equal to current-threshold-wallet
 
             ;; Assert that entire utxo output has been consumed / is empty
             (ok true)
-        )
+        
     )
 )
 
@@ -441,8 +458,10 @@
     (let
         (
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (next-cycle (+ current-cycle u1))
             (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
             (current-pool-stackers (get stackers current-pool))
+            (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
         )
 
         ;; Assert that we're in the transfer window
@@ -463,7 +482,7 @@
         )
 
         ;; Change peg-state to "bad-peg" :(
-        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change) (err u1)))
 
     )
 )
@@ -473,8 +492,11 @@
     (let
         (
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (next-cycle (+ current-cycle u1))
             (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
             (current-pool-stackers (get stackers current-pool))
+            (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
+            (next-pool-threshold-wallet (get threshold-wallet next-pool))
         )
 
         ;; Assert that we're in the transfer window
@@ -498,7 +520,7 @@
         )
 
         ;; Change peg-state to "bad-peg"
-        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change error-type) (err u1)))
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change) (err u1)))
 
     )
 )
@@ -514,23 +536,23 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Disburse function for signers in (n - 1) to verify that their pox-rewards have been disbursed
-(define-public (prove-previous-rewards-were-disbursed (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
-    (let 
-        (
-            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
-            (previous-cycle (- current-cycle u1))
-            (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
-            (previous-threshold-wallet (get threshold-wallet previous-pool))
-        )
-        (
-            ;; Assert we're in the disbursement window
+;; (define-public (prove-previous-rewards-were-disbursed (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
+;;     (let 
+;;         (
+;;             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+;;             (previous-cycle (- current-cycle u1))
+;;             (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
+;;             (previous-threshold-wallet (get threshold-wallet previous-pool))
+;;         )
+;;         (
+;;             ;; Assert we're in the disbursement window
 
-            ;; Assert that rewards haven't already been disbursed
+;;             ;; Assert that rewards haven't already been disbursed
 
-            ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
+;;             ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
 
-            ;; Assert that entire utxo output has been consumed / is empty
-            (ok true)
-        )
-    )
-)
+;;             ;; Assert that entire utxo output has been consumed / is empty
+;;             (ok true)
+;;         )
+;;     )
+;; )

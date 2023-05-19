@@ -14,7 +14,6 @@
 ;; Handoff Reclaim/Penalty -> On BTC/STX
 ;; 3. The transaction is NOT consumed & the pegged-BTC is NOT transferred to the new threshold-wallet (n+1)
 
-;; Need a voting receipt  
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Cons, Vars & Maps ;;;;;
