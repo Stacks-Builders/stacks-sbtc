@@ -94,7 +94,7 @@
 
 ;; send the mined P2TR spend transaction
 ;; It appears the current wire format of a peg-in is as follows:
-;; [op 1 byte] [version 1 byte] [address version 1 byte] [address 20 bytes] [length prefixed contract name] OP_DROP [33 bytes] OP_CHECKSIG
+;; [op 1 byte] [version 1 byte] [address version 1 byte] [address 20 bytes] [length prefixed contract name] OP_DROP [32 public key] OP_CHECKSIG
 (define-public (complete-peg-in
 	(burn-height uint)
 	(tx (buff 4096))
