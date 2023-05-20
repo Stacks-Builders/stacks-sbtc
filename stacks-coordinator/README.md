@@ -56,7 +56,7 @@ classDiagram
     StacksNode <.. PegQueue
     StacksNode <.. FeeWallet
     BitcoinNode <.. FeeWallet
-    
+
     class StacksCoordinator {
         PegQueue
         FeeWallet
@@ -236,3 +236,30 @@ stacks-signer $ cargo run -- --id 2 --config conf/signer.toml
 stacks-signer $ cargo run -- --id 1 --config conf/signer.toml
 stacks-coordinator $ cargo run -- --config conf/coordinator.toml --signer-config conf/signer.toml dkg
 ```
+
+### Useful notes for testing coordinator:
+
+1. Set up a stacks node with the alpha changes (See https://github.com/stacks-network/stacks-blockchain/tree/next)
+`stacks-node start --config stacks.cfg`
+- Ensure your coordinator config file points to this node. E.g:
+`stacks_node_rpc_url = "http://localhost:20443"`
+2. Set up a bitcoin node
+`bitcoind -rpcuser=abcd -rpcpassword=abcd -rpcport=18445`
+- Ensure your config file points to this node
+`bitcoin_node_rpc_url = "http://abcd:abcd@localhost:18445"`
+3. Example deposit and withdrawal requests can be found at
+https://testnet.stx.eco/history?net=testnet:
+- E.g. Deposit: http://localhost:20443/v2/burn_ops/2425540/peg_in
+- E.g. Withdrawal: http://localhost:20443/v2/burn_ops/2425663/peg_out_request
+4. sbtc alpha is deployed to testnet. Feel free to explore it at: https://explorer.hiro.so/sandbox/contract-call/ST306HDPY54T81RZ7A9NGA2F03B8NRGW6Y59ZRZSD.faint-tan-cobra/get-signer-data?chain=testnet
+5. Set up signers in background:
+`cargo run --bin relay-server`
+`stacks-signer run --id 1 --config signer.toml`
+`stacks-signer run --id 2 --config signer.toml`
+`stacks-signer run --id 3 --config signer.toml`
+6. Run coordinator
+`stacks-coordinator --config ~/git/core-eng/stacks-coordinator/conf/coordinator.toml --signer-config ~/git/core-eng/stacks-coordinator/conf/signer.toml -b 2425540 run`
+
+NOTE: the `-b` option is to specify a starting block height which is useful for forcing it to quickly find a block height that has a peg in or peg out...
+
+NOTE: if you don't change the target_block_height within the code when it polls for peg-ins and outs...you may wait a loooong time as it iterates from start block height to the current block height which at this point is quite far behind the tip (assuming you set it to some lower block height that contains known deposit/withdrawal requests).

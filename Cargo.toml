@@ -12,7 +12,7 @@ members = [
   "yarpc"]
 
 [workspace.dependencies]
-bs58 = "0.2"
+bs58 = "0.4"
 blockstack-core = { git = "https://github.com/stacks-network/stacks-blockchain/", branch = "next" }
 clap = { version = "4.1.1", features = ["derive", "env"] }
 p256k1 = "5"
