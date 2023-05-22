@@ -1,28 +1,9 @@
 ;; sbtc-mini-stacker-pool
-;; pool contract for STX stackers volunteering to maintain the sbtc-mini peg mechanism
-
-;; stacker pool lifecycle
-;; 1. principal calls into .pox-2 (allow-contract-caller ...) to signal that this pool contract is given delegation rights
-;; 2. principal calls into this contract (delegate-stx ...) to delegate STX to this contract, this does *not* lock the STX but allows delegate (this contract) to issue stacking lock, needs to only be called once
-;; 3. any principal calls into this contract (delegate-stack-stx ...) to lock & stack for next cycle
-
-;; voting lifecycle
-;; 1. When sbtc-mini-controller signals that voting period is active, stackers call (vote ...) to submit and/or vote on a shared derived wallet address
-
-;; to-discuss
-;; when is signer-minimal updated? by whom?
-;; how to check entire output has been consumed?
-;; is there a chance that rewards arrive before peg has been transferred?
-;; what's stopping a signer in n-1 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Cons, Vars & Maps ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;;;;;;;;;;;;;;;;;
 ;;; constants ;;;
-;;;;;;;;;;;;;;;;;
 
 ;; state as "normal" suggesting that the pool is operating as expected / wasn't in a "bad state"
 (define-constant normal-cycle-len u2016)
@@ -33,9 +14,7 @@
 ;; Burn POX address for penalizing stackers/signers
 (define-constant pox-burn-address { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699})
 
-;;;;;;;;;;;;;;
 ;;; errors ;;;
-;;;;;;;;;;;;;;
 (define-constant err-not-signer (err u0))
 (define-constant err-allowance-not-set (err u1))
 (define-constant err-allowance-height (err u2))
@@ -60,10 +39,7 @@
 (define-constant err-unhandled-request (err u21))
 (define-constant err-invalid-penalty-type (err u22))
 
-
-;;;;;;;;;;;;;;;;;
 ;;; variables ;;;
-;;;;;;;;;;;;;;;;;
 
 ;; Highest reward cycle in which all rewards are disbursed (aka the last "good state" peg cycle
 (define-data-var last-disbursed-burn-height uint u0)
@@ -83,9 +59,7 @@
 (define-data-var transfer-window-rel-end uint u2000)
 (define-data-var penalty-window-rel-end uint u2100)
 
-;;;;;;;;;;;;
 ;;; maps ;;;
-;;;;;;;;;;;;
 
 ;; Map that tracks all relevant stacker data for a given pool (by cycle index)
 (define-map pool uint {
@@ -136,10 +110,7 @@
 (define-map payout-address-in-cycle { version: (buff 1), hashbytes: (buff 32) } uint)
 
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Read-Only Functions ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Get current cycle pool
 (define-read-only (get-current-cycle-pool) 
@@ -203,16 +174,14 @@
 )
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;;;;;;; Disbursement Functions ;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Function that proves POX rewards have been disbursed
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;;;;; Registration Functions ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Pre-register signer
 ;; @desc: pre-registers a stacker for the cycle, goal of this function is to gurantee the amount of STX to be stacked for the next cycle
 (define-public (signer-pre-register (new-signer principal) (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}))
     (let 
@@ -250,7 +219,6 @@
 
         ;; Stack aggregate-commit
         ;; As pointed out by Friedger, this fails when the user is already stacking. Match err-branch takes care of this with stack-delegate-increase instead.
-        ;;(unwrap! (as-contract (contract-call? 'ST000000000000000000002AMW42H.pox-2 stack-aggregation-commit-indexed pox-addr next-cycle)) err-pre-registration-aggregate-commit)
         (match (as-contract (contract-call? 'ST000000000000000000002AMW42H.pox-2 stack-aggregation-commit-indexed pox-addr next-cycle))
             ok-branch
                 true
@@ -266,16 +234,12 @@
                 )
         )
 
-        ;; Map set signer, since this is pre-register that's *not* included in threshold-wallet for next cycle, do not set map for "signer" as this would include them in vote
-        ;;(map-set signer {stacker: principal, pool: })
-
         ;; Record pre-signer
         (ok (map-set pre-signer {stacker: tx-sender, pool: next-cycle} true))
 
     )
 )
 
-;; Register as a signer
 ;; @desc: registers a signer for the cycle, goal of this function is to gurantee the amount of STX to be stacked for the next cycle
 (define-public (signer-register (pre-registered-signer principal) (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}) (public-key (buff 33)))
     (let 
@@ -327,12 +291,9 @@
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Voting Functions ;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Voting function for deciding the threshold-wallet/PoX address for the next pool & cycle
-;; Once a single wallet-candidate reaches 70% of the vote, stack-aggregate-index
+;; @desc: Voting function for deciding the threshold-wallet/PoX address for the next pool & cycle, once a single wallet-candidate reaches 70% of the vote, stack-aggregate-index
 (define-public (vote-for-threshold-wallet-candidate (pox-addr { version: (buff 1), hashbytes: (buff 32)}))
     (let 
         (
@@ -426,9 +387,8 @@
 )
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;;;;;;; Transfer Functions ;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Transfer function for proving that current/soon-to-be-old signers have transferred the peg balance to the next threshold-wallet
 (define-public (prove-balance-was-transferred (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
@@ -449,9 +409,9 @@
     )
 )
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 ;;;;;;; Penalty Functions ;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Penalty function for an unexpired, unhandled request-post-vote
 (define-public (penalty-unhandled-request)

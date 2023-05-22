@@ -14,6 +14,9 @@
 ;; Handoff Reclaim/Penalty -> On BTC/STX
 ;; 3. The transaction is NOT consumed & the pegged-BTC is NOT transferred to the new threshold-wallet (n+1)
 
+;; we don't know what that transaction type will look like: 1 input from previous address that goes to the next address
+;; What is the peg-wallet address look like? 
+;; how are the signers going to consolidate inputs/outputs
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Cons, Vars & Maps ;;;;;
