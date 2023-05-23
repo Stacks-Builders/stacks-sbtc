@@ -38,6 +38,7 @@
 (define-constant err-not-in-transfer-window (err u20))
 (define-constant err-unhandled-request (err u21))
 (define-constant err-invalid-penalty-type (err u22))
+(define-constant err-already-disbursed (err u23))
 
 ;;; variables ;;;
 
@@ -68,7 +69,8 @@
     threshold-wallet-candidates: (list 100 { version: (buff 1), hashbytes: (buff 32) }),
     threshold-wallet: (optional { version: (buff 1), hashbytes: (buff 32) }),
     last-aggregation: (optional uint),
-    reward-index: (optional uint)
+    reward-index: (optional uint),
+    reward-disbursed: bool
 })
 
 ;; Map that tracks all stacker/signer data for a given principal & pool (by cycle index)
@@ -176,7 +178,46 @@
 
 
 ;;;;;;; Disbursement Functions ;;;;;;;
-;; Function that proves POX rewards have been disbursed
+;; Function that proves POX rewards have been disbursed, stuck on how to handle this since we don't know the current peg balance? 
+;; Balance might not matter as long as it's entirely consumed
+;; Is there *any* chance of an overlap between the transfer window & pox rewards? (don't think so)
+
+;; Disburse function for signers in (n - 1) to verify that their pox-rewards have been disbursed
+(define-public (prove-previous-rewards-were-disbursed 
+    (burn-height uint)
+	(tx (buff 4096))
+	(header (buff 80))
+	(tx-index uint)
+	(tree-depth uint)
+	(wproof (list 14 (buff 32)))
+    (witness-merkle-root (buff 32))
+    (witness-reserved-data (buff 32))
+	(ctx (buff 1024))
+	(cproof (list 14 (buff 32))))
+    (let 
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (previous-cycle (- current-cycle u1))
+            (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
+            (previous-threshold-wallet (get threshold-wallet previous-pool))
+            (previous-pool-disbursed (get reward-disbursed previous-pool))
+        )
+        
+            ;; Assert we're in the disbursement window
+            (asserts! (is-eq (get-current-window) "disbursement")  err-not-in-registration-window)
+
+            ;; Assert that rewards haven't already been disbursed
+            (asserts! (not previous-pool-disbursed) err-already-disbursed)
+
+            
+            ;;(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
+
+            ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
+
+            ;; Assert that entire utxo output has been consumed / is empty
+            (ok true)
+    )
+)
 
 
 
@@ -486,33 +527,3 @@
 )
 
 ;; Penalty function for when a stacker fails to transfer the current peg balance to the next threshold wallet
-;; Stuck on how to handle this since we don't know the current peg balance? 
-;; Actually balance might not matter as long as it's entirely consumed
-;; Is there *any* chance of an overlap between the transfer window & pox rewards? (don't think so)
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;; Disburse Functions ;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; Disburse function for signers in (n - 1) to verify that their pox-rewards have been disbursed
-;; (define-public (prove-previous-rewards-were-disbursed (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
-;;     (let 
-;;         (
-;;             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
-;;             (previous-cycle (- current-cycle u1))
-;;             (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
-;;             (previous-threshold-wallet (get threshold-wallet previous-pool))
-;;         )
-;;         (
-;;             ;; Assert we're in the disbursement window
-
-;;             ;; Assert that rewards haven't already been disbursed
-
-;;             ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
-
-;;             ;; Assert that entire utxo output has been consumed / is empty
-;;             (ok true)
-;;         )
-;;     )
-;; )
