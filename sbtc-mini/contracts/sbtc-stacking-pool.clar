@@ -14,6 +14,9 @@
 ;; Burn POX address for penalizing stackers/signers
 (define-constant pox-burn-address { version: 0x00, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699})
 
+;; Dust limit placeholder for checking that pox-rewards were disbursed (in sats)
+(define-constant dust-limit u100)
+
 ;;; errors ;;;
 (define-constant err-not-signer (err u0))
 (define-constant err-allowance-not-set (err u1))
@@ -39,6 +42,16 @@
 (define-constant err-unhandled-request (err u21))
 (define-constant err-invalid-penalty-type (err u22))
 (define-constant err-already-disbursed (err u23))
+(define-constant err-not-handoff-contract (err u24))
+(define-constant err-parsing-btc-tx (err u25))
+(define-constant err-threshold-wallet-is-none (err u26))
+(define-constant err-tx-not-mined (err u27))
+(define-constant err-wrong-pubkey (err u28))
+(define-constant err-dust-remains (err u29))
+(define-constant err-balance-not-transferred (err u30))
+(define-constant err-not-in-penalty-window (err u31))
+
+
 
 ;;; variables ;;;
 
@@ -70,6 +83,7 @@
     threshold-wallet: (optional { version: (buff 1), hashbytes: (buff 32) }),
     last-aggregation: (optional uint),
     reward-index: (optional uint),
+    balance-transferred: bool,
     reward-disbursed: bool
 })
 
@@ -178,14 +192,17 @@
 
 
 ;;;;;;; Disbursement Functions ;;;;;;;
-;; Function that proves POX rewards have been disbursed, stuck on how to handle this since we don't know the current peg balance? 
-;; Balance might not matter as long as it's entirely consumed
-;; Is there *any* chance of an overlap between the transfer window & pox rewards? (don't think so)
+;; Function that proves POX rewards have been disbursed from the previous threshold wallet to the previous pool signers. This happens in x steps:
+;; 1. Fetch previous pool threshold-wallet / pox-reward-address
+;; 2. Parse-tx to get all (8) outputs
+;; 3. Check that for each output, the public-key matches the pox-reward-address
+;; 4. Check that for each output, the amount is lower than constant dust 
+;; Note - this may be updated to later check against a specific balance
 
 ;; Disburse function for signers in (n - 1) to verify that their pox-rewards have been disbursed
-(define-public (prove-previous-rewards-were-disbursed 
+(define-public (prove-rewards-were-disbursed 
     (burn-height uint)
-	(tx (buff 4096))
+	(tx (buff 1024))
 	(header (buff 80))
 	(tx-index uint)
 	(tree-depth uint)
@@ -199,23 +216,65 @@
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
             (previous-cycle (- current-cycle u1))
             (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
-            (previous-threshold-wallet (get threshold-wallet previous-pool))
+            (unwrapped-previous-threshold-wallet (unwrap! (get threshold-wallet previous-pool) err-threshold-wallet-is-none))
+            (previous-threshold-wallet (get hashbytes unwrapped-previous-threshold-wallet))
+            (previous-threshold-wallet-version (get version unwrapped-previous-threshold-wallet))
             (previous-pool-disbursed (get reward-disbursed previous-pool))
+            (parsed-tx (unwrap! (contract-call? .clarity-bitcoin parse-tx tx) err-parsing-btc-tx))
+            (tx-outputs (get outs parsed-tx))
+            ;; Done manually for read/write concerns
+            (tx-output-0 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u0)))
+            (tx-output-1 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u1)))
+            (tx-output-2 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u2)))
+            (tx-output-3 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u3)))
+            (tx-output-4 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u4)))
+            (tx-output-5 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u5)))
+            (tx-output-6 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u6)))
+            (tx-output-7 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u7)))
         )
         
             ;; Assert we're in the disbursement window
             (asserts! (is-eq (get-current-window) "disbursement")  err-not-in-registration-window)
 
+            ;; Assert that balance of previous-threshold-wallet was transferred
+            (asserts! (get balance-transferred previous-pool) err-balance-not-transferred)
+
             ;; Assert that rewards haven't already been disbursed
             (asserts! (not previous-pool-disbursed) err-already-disbursed)
 
-            
-            ;;(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
+            ;; Assert that transaction was mined...tbd last two params
+            (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof) err-tx-not-mined)
 
-            ;; Assert that unwrapped pox-reward is equal to bitcoin address in transaction
+            ;; Assert that every unwrapped receiver addresss is equal to previous-threshold-wallet
+            (asserts! (and 
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-0))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-1))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-2))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-3))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-4))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-5))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-6))
+                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-7))
+            ) err-wrong-pubkey)
 
-            ;; Assert that entire utxo output has been consumed / is empty
-            (ok true)
+            ;; Assert that every unwrapped output is less than dust
+            (asserts! (and 
+                (< (get value tx-output-0) dust-limit)
+                (< (get value tx-output-1) dust-limit)
+                (< (get value tx-output-2) dust-limit)
+                (< (get value tx-output-3) dust-limit)
+                (< (get value tx-output-4) dust-limit)
+                (< (get value tx-output-5) dust-limit)
+                (< (get value tx-output-6) dust-limit)
+                (< (get value tx-output-7) dust-limit)
+            ) err-dust-remains)
+
+            ;; All POX rewards have been distributed, update relevant vars/maps
+            (var-set last-disbursed-burn-height block-height)
+            (ok (map-set pool previous-cycle (merge 
+                previous-pool 
+                {reward-disbursed: true}
+            )))
     )
 )
 
@@ -432,6 +491,7 @@
 ;;;;;;; Transfer Functions ;;;;;;;
 
 ;; Transfer function for proving that current/soon-to-be-old signers have transferred the peg balance to the next threshold-wallet
+;; Can only be called by the sbtc-peg-transfer/handoff contract. If successful, balance-disbursed is set to true for the previous pool
 (define-public (prove-balance-was-transferred (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
     (let 
         (
@@ -441,11 +501,18 @@
         )
         
             ;; Assert we're in the transfer window
+            (asserts! (is-eq (get-current-window) "transfer")  err-not-in-transfer-window)
+
+            ;; Assert that contract-caller is .sbtc-peg-transfer
+            (asserts! (is-eq contract-caller .sbtc-peg-transfer) err-not-handoff-contract)
 
             ;; Assert that unwrapped receiver addresss is equal to current-threshold-wallet
 
-            ;; Assert that entire utxo output has been consumed / is empty
-            (ok true)
+            ;; peg-transfer /handoff success, update relevant vars/maps
+            (ok (map-set pool current-cycle (merge 
+                current-pool 
+                {balance-transferred: true}
+            )))
         
     )
 )
@@ -527,3 +594,42 @@
 )
 
 ;; Penalty function for when a stacker fails to transfer the current peg balance to the next threshold wallet
+(define-public (penalty-balance-transfer)
+    (let
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
+            (current-pool-balance-transfer (get balance-transferred current-pool))
+            (current-pool-stackers (get stackers current-pool))
+            (next-cycle (+ current-cycle u1))
+            (next-pool (unwrap! (map-get? pool next-cycle) err-pool-cycle))
+            (next-pool-threshold-wallet (get threshold-wallet next-pool))
+        )
+
+        ;; Assert that we're in the penalty window
+        (asserts! (is-eq (get-current-window) "penalty") err-not-in-penalty-window)
+
+        ;; Assert that next-pool-threshold-wallet is-some
+        (asserts! (is-some next-pool-threshold-wallet) err-unhandled-request)
+
+        ;; Assert that balance-transfer is false
+        (asserts! (not current-pool-balance-transfer) err-unhandled-request)
+
+        ;; Penalize stackers by re-stacking but with a pox-reward address of burn address
+        (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-burn-address next-cycle))
+            ok-result
+                (map-set pool next-cycle (merge
+                    next-pool
+                    {last-aggregation: (some block-height), reward-index: (some ok-result)}
+                ))
+            err-result
+                false
+        )
+
+        ;; Change peg-state to "bad-peg"
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change) (err u1)))
+
+    )
+)
+
+;; Penalty function for when the pox-rewards aren't disbursed in time / registration is missing
