@@ -50,6 +50,8 @@
 (define-constant err-dust-remains (err u29))
 (define-constant err-balance-not-transferred (err u30))
 (define-constant err-not-in-penalty-window (err u31))
+(define-constant err-rewards-already-disbursed (err u32))
+(define-constant err-not-in-voting-window (err u33))
 
 
 
@@ -84,7 +86,7 @@
     last-aggregation: (optional uint),
     reward-index: (optional uint),
     balance-transferred: bool,
-    reward-disbursed: bool
+    rewards-disbursed: bool
 })
 
 ;; Map that tracks all stacker/signer data for a given principal & pool (by cycle index)
@@ -136,6 +138,11 @@
         )
         (map-get? pool current-cycle)
     )
+)
+
+;; Get specific cycle pool
+(define-read-only (get-specific-cycle-pool (specific-cycle uint)) 
+        (map-get? pool specific-cycle)
 )
 
 ;; Get signer in cycle
@@ -219,7 +226,7 @@
             (unwrapped-previous-threshold-wallet (unwrap! (get threshold-wallet previous-pool) err-threshold-wallet-is-none))
             (previous-threshold-wallet (get hashbytes unwrapped-previous-threshold-wallet))
             (previous-threshold-wallet-version (get version unwrapped-previous-threshold-wallet))
-            (previous-pool-disbursed (get reward-disbursed previous-pool))
+            (previous-pool-disbursed (get rewards-disbursed previous-pool))
             (parsed-tx (unwrap! (contract-call? .clarity-bitcoin parse-tx tx) err-parsing-btc-tx))
             (tx-outputs (get outs parsed-tx))
             ;; Done manually for read/write concerns
@@ -273,7 +280,7 @@
             (var-set last-disbursed-burn-height block-height)
             (ok (map-set pool previous-cycle (merge 
                 previous-pool 
-                {reward-disbursed: true}
+                {rewards-disbursed: true}
             )))
     )
 )
@@ -492,25 +499,18 @@
 
 ;; Transfer function for proving that current/soon-to-be-old signers have transferred the peg balance to the next threshold-wallet
 ;; Can only be called by the sbtc-peg-transfer/handoff contract. If successful, balance-disbursed is set to true for the previous pool
-(define-public (prove-balance-was-transferred (tx-id (buff 32)) (output-index uint) (merkle-path (list 32 (buff 32))))
+(define-public (balance-was-transferred (previous-cycle uint))
     (let 
         (
-            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
-            (current-pool (unwrap! (map-get? pool current-cycle) err-pool-cycle))
-            (current-threshold-wallet (get threshold-wallet current-pool))
+            (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
         )
-        
-            ;; Assert we're in the transfer window
-            (asserts! (is-eq (get-current-window) "transfer")  err-not-in-transfer-window)
 
-            ;; Assert that contract-caller is .sbtc-peg-transfer
+            ;; Assert that contract-caller is .sbtc-peg-transfer / handoff contract
             (asserts! (is-eq contract-caller .sbtc-peg-transfer) err-not-handoff-contract)
 
-            ;; Assert that unwrapped receiver addresss is equal to current-threshold-wallet
-
             ;; peg-transfer /handoff success, update relevant vars/maps
-            (ok (map-set pool current-cycle (merge 
-                current-pool 
+            (ok (map-set pool previous-cycle (merge 
+                previous-pool 
                 {balance-transferred: true}
             )))
         
@@ -609,10 +609,10 @@
         ;; Assert that we're in the penalty window
         (asserts! (is-eq (get-current-window) "penalty") err-not-in-penalty-window)
 
-        ;; Assert that next-pool-threshold-wallet is-some
+        ;; Assert that next-pool-threshold-wallet is-some / was voted in correctly
         (asserts! (is-some next-pool-threshold-wallet) err-unhandled-request)
 
-        ;; Assert that balance-transfer is false
+        ;; Assert that balance-transfer is false (wasn't already transferred)
         (asserts! (not current-pool-balance-transfer) err-unhandled-request)
 
         ;; Penalize stackers by re-stacking but with a pox-reward address of burn address
@@ -633,3 +633,37 @@
 )
 
 ;; Penalty function for when the pox-rewards aren't disbursed in time / registration is missing
+(define-public (penalty-pox-reward-disbursement)
+    (let
+        (
+            (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
+            (previous-cycle (- current-cycle u1))
+            (previous-pool (unwrap! (map-get? pool previous-cycle) err-pool-cycle))
+            (previous-pool-rewards-disbursed (get rewards-disbursed previous-pool))
+        )
+
+        ;; Assert that we're in the voting window (aka registration window was missed)
+        (asserts! (is-eq (get-current-window) "voting") err-not-in-voting-window)
+
+        ;; Assert that last pool disbursed is false (wasn't already disbursed)
+        (asserts! (not previous-pool-rewards-disbursed) err-rewards-already-disbursed)
+
+        ;; To review/ask about
+        ;; Penalize stackers by re-stacking but with a pox-reward address of burn address
+        ;; Distributing pox-rewards punishes current signers even if they did nothing wrong?
+        ;; Meanwhile previous signers aren't punished since the pox-rewards are already at the previous threshold wallet
+        ;; (match (as-contract (contract-call? 'SP000000000000000000002Q6VF78.pox-2 stack-aggregation-commit-indexed pox-burn-address next-cycle))
+        ;;     ok-result
+        ;;         (map-set pool next-cycle (merge
+        ;;             next-pool
+        ;;             {last-aggregation: (some block-height), reward-index: (some ok-result)}
+        ;;         ))
+        ;;     err-result
+        ;;         false
+        ;; )
+
+        ;; Change peg-state to "bad-peg"
+        (ok (unwrap! (contract-call? .sbtc-registry penalty-peg-state-change) (err u1)))
+
+    )
+)

@@ -101,6 +101,11 @@
 	(var-get peg-out-requests-pending)
 )
 
+;; to-discuss, placeholder for peg-transfer contract
+(define-read-only (get-peg-balance)
+	u1
+)
+
 ;; Update peg-state
 (define-public (set-peg-state (state bool))
 	(begin
