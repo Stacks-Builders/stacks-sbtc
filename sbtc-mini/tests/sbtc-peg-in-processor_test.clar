@@ -41,7 +41,9 @@
 (define-constant mock-coinbase-witness-reserved-data 0x)
 
 (define-constant mock-coinbase-tx-1 0x020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03016500ffffffff0200f2052a010000002251205444612a122cd09b4b3457d46c149a23d8685fb7d3aac61ea7eee8449555293b0000000000000000266a24aa21a9edab124e70e4a18e72f2ac6f635aebb08862d5b5b1c0519cd9f3222a24a48482560120000000000000000000000000000000000000000000000000000000000000000000000000)
-(define-constant mock-coinbase-txid-1 0x79c2f22b02b9981ac1aa72161f210dd870191341bc2fe44682e0827094e76f25)
+(define-constant mock-coinbase-txid-1 0x7888bc71f3497f187f708912c5cf24cab1d99a83b04d0a63c14150cc51d62705)
+
+(define-constant mock-txid-merkle-root-hash-1-le 0xc3a195310679b98fbe7e3d4f2603878746af28acf32657bb69e50a60f1670f50)
 
 (define-read-only (get-sbtc-balance (who principal))
 	(unwrap! (contract-call? .sbtc-token get-balance who) u0)
@@ -59,7 +61,7 @@
 		(try! (contract-call? .sbtc-registry insert-cycle-peg-wallet mock-peg-cycle mock-peg-wallet))
 		;; Mine a fake burnchain block that includes mock transactions
 		;;(try! (contract-call? .sbtc-testnet-debug-controller simulate-mine-solo-burnchain-block mock-burnchain-height (list mock-tx-1)))
-		(unwrap! (contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash mock-burnchain-height 0x6bd159e910166e615d1a9fa14cd730e1de375da38e274628ef00d11f2396f857) (err u1122))
+		(unwrap! (contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash mock-burnchain-height 0x8edbd8533f28188fc25d3bec31e72206fff777334bdaa5cf941ea245326381d3) (err u1122))
 		(ok true)
 	)
 )
@@ -140,11 +142,11 @@
 	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
 			mock-burnchain-height ;; burn-height
 			mock-tx-1 ;; tx
-			;; header hash: 0x6bd159e910166e615d1a9fa14cd730e1de375da38e274628ef00d11f2396f857
-			0x020000000000000000000000000000000000000000000000000000000000000000000000e0f8a686b8998c2cb61ea9ae97120a5fc789b022fd38625655b5dbe952e4fffe000000000000000000000000 ;; header
-			u1 ;; tx-index
-			u1 ;; tree-depth
-			(list) ;; wproof
+			;; header hash: 0x8edbd8533f28188fc25d3bec31e72206fff777334bdaa5cf941ea245326381d3
+			0x020000000000000000000000000000000000000000000000000000000000000000000000c3a195310679b98fbe7e3d4f2603878746af28acf32657bb69e50a60f1670f50000000000000000000000000 ;; header
+			u0 ;; tx-index
+			u0 ;; tree-depth
+			(list 0x7888bc71f3497f187f708912c5cf24cab1d99a83b04d0a63c14150cc51d62705) ;; wproof
 			mock-witness-root-hash-1
 			mock-coinbase-witness-reserved-data
 			mock-coinbase-tx-1 ;; ctx
