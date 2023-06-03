@@ -122,6 +122,7 @@
 ;; 	)
 ;; )
 
+;; @name Test peg-in reveal proof (mints sBTC)
 ;; @mine-blocks-before 5
 (define-public (test-peg-in-reveal)
 	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
