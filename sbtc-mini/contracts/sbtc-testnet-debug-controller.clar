@@ -115,20 +115,64 @@
 )
 
 ;; TODO
-(define-read-only (generate-segwit-coinbase-transaction-input (segwit-root-hash (buff 32)) (witness-reserved-data (buff 32)))
+(define-read-only (generate-segwit-coinbase-transaction-input (segwit-root-hash-le (buff 32)) (witness-reserved-data (buff 32)))
 	(concat
 		;;32 bytes zero txid---------------------------------------------|out idx|l|
 		0x0000000000000000000000000000000000000000000000000000000000000000ffffffff26
 	(concat
-		(generate-segwit-commit-structure segwit-root-hash witness-reserved-data)
+		(generate-segwit-commit-structure segwit-root-hash-le witness-reserved-data)
 		0xffffffff ;; sequence
 	))
 )
 
-(define-read-only (generate-segwit-commit-structure (segwit-root-hash (buff 32)) (witness-reserved-data (buff 32)))
+(define-read-only (generate-segwit-commit-structure (segwit-root-hash-le (buff 32)) (witness-reserved-data (buff 32)))
 	(concat
 		0x6a24aa21a9ed
-		(sha256 (sha256 (concat segwit-root-hash witness-reserved-data)))
+		(sha256 (sha256 (concat segwit-root-hash-le witness-reserved-data)))
+	)
+)
+
+(define-read-only (generate-test-data)
+	(let (
+		(mock-tx 0x02000000000101bc3ef1d3826d9432f400840bbfc91931e47cf4aa592821326294c1f1d8cb245b0100000000fdffffff010065cd1d00000000160014bfbe43457367d8acd108dcf1a8ca195ba6ba4ba90340000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f3c183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac41c01dae61a4a8f841952be3a511502d4f56e889ffa0685aa0098773ea2d4309f62474708f439116be919de13c6d3200d2305fcbdf5a9e7d2c079e85b427bb110e9000000000)
+		(mock-txid-be 0xf07c86721f795087e2975df2b42ea04e4f34248108fbb225872f8ec9d1914cc7)
+		(mock-wtxid-be 0x94a60ceec0be7c17b0b6d924b8c8aea8be49c003d32b831e256d035356b253b8)
+
+		(mock-txid-le (reverse-buff32 mock-txid-be))
+		(mock-wtxid-le (reverse-buff32 mock-wtxid-be))
+
+		(mock-witness-reserved-data 0x0000000000000000000000000000000000000000000000000000000000000000)
+		(mock-coinbase-wtxid 0x0000000000000000000000000000000000000000000000000000000000000000)
+
+		(mock-wtxid-merkle-root-le (sha256 (sha256 (concat mock-coinbase-wtxid mock-wtxid-le))))
+		(mock-witness-commitment-hash (sha256 (sha256 (concat mock-wtxid-merkle-root-le mock-witness-reserved-data))))
+
+		(mock-coinbase-tx
+			(concat 0x020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff03016500ffffffff0200f2052a010000002251205444612a122cd09b4b3457d46c149a23d8685fb7d3aac61ea7eee8449555293b0000000000000000266a24aa21a9ed
+			(concat mock-witness-commitment-hash
+				    0x0120000000000000000000000000000000000000000000000000000000000000000000000000
+			)))
+
+		(mock-coinbase-txid-le (sha256 (sha256 mock-coinbase-tx)))
+
+		(mock-txid-merkle-root-le (sha256 (sha256 (concat mock-coinbase-txid-le mock-txid-le))))
+
+		(mock-block-header (create-solo-burnchain-header-buff mock-txid-merkle-root-le))
+		(mock-block-header-hash-le (calculate-solo-burnchain-header-hash mock-txid-merkle-root-le))
+		(mock-block-header-hash-be (reverse-buff32 mock-block-header-hash-le))
+	)
+		{
+			mock-coinbase-tx: mock-coinbase-tx,
+			mock-coinbase-txid-le: mock-coinbase-txid-le,
+
+			mock-txid-le: mock-txid-le,
+			mock-wtxid-le: mock-wtxid-le,
+
+			mock-wtxid-merkle-root-le: mock-wtxid-merkle-root-le,
+			mock-block-header: mock-block-header,
+			mock-block-header-hash-le: mock-block-header-hash-le,
+			mock-block-header-hash-be: mock-block-header-hash-be
+		}
 	)
 )
 
