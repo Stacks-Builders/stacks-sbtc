@@ -132,7 +132,8 @@
 	)
 )
 
-(define-read-only (generate-test-data)
+;; TODO: Remove in the future. Putting this here temporarily.
+(define-read-only (generate-test-data-peg-out-commit-reveal)
 	(let (
 		(mock-tx 0x02000000000101bc3ef1d3826d9432f400840bbfc91931e47cf4aa592821326294c1f1d8cb245b0100000000fdffffff010065cd1d00000000160014bfbe43457367d8acd108dcf1a8ca195ba6ba4ba90340000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f3c183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac41c01dae61a4a8f841952be3a511502d4f56e889ffa0685aa0098773ea2d4309f62474708f439116be919de13c6d3200d2305fcbdf5a9e7d2c079e85b427bb110e9000000000)
 		(mock-txid-be 0xf07c86721f795087e2975df2b42ea04e4f34248108fbb225872f8ec9d1914cc7)
@@ -164,10 +165,8 @@
 		{
 			mock-coinbase-tx: mock-coinbase-tx,
 			mock-coinbase-txid-le: mock-coinbase-txid-le,
-
 			mock-txid-le: mock-txid-le,
 			mock-wtxid-le: mock-wtxid-le,
-
 			mock-wtxid-merkle-root-le: mock-wtxid-merkle-root-le,
 			mock-block-header: mock-block-header,
 			mock-block-header-hash-le: mock-block-header-hash-le,

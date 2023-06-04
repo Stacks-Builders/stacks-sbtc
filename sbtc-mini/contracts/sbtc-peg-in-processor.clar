@@ -1,39 +1,18 @@
 (define-constant err-peg-in-expired (err u500))
 (define-constant err-not-a-peg-wallet (err u501))
-(define-constant err-sequence-length-invalid (err u502))
 (define-constant err-invalid-principal (err u503))
-(define-constant err-op-return-not-found (err u504))
 (define-constant err-peg-value-not-found (err u505))
 (define-constant err-missing-witness (err u506))
 (define-constant err-unlock-script-not-found-or-invalid (err u507))
 
-(define-constant version-P2WPKH 0x04)
-(define-constant version-P2WSH 0x05)
-(define-constant version-P2TR 0x06)
-(define-constant supported-address-versions (list version-P2WPKH version-P2WSH version-P2TR))
-
 (define-constant type-standard-principal 0x05)
 (define-constant type-contract-principal 0x06)
-
-(define-data-var minimum-peg-in-amount uint u1000000) ;; 0.01 BTC
 
 (define-read-only (is-protocol-caller (who principal))
 	(contract-call? .sbtc-controller is-protocol-caller contract-caller)
 )
 
-(define-read-only (get-minimum-peg-in-amount)
-	(ok (var-get minimum-peg-in-amount))
-)
-
-;; --- Protocol functions
-
-;; #[allow(unchecked_data)]
-(define-public (protocol-set-minimum-peg-in-amount (new-minimum uint))
-	(begin
-		(try! (is-protocol-caller contract-caller))
-		(ok (var-set minimum-peg-in-amount new-minimum))
-	)
-)
+;; --- Public functions
 
 (define-read-only (extract-principal (sequence (buff 128)) (start uint))
 	(let ((contract-name-length (match (element-at? sequence (+ start u21)) length-byte (buff-to-uint-be length-byte) u0)))
@@ -43,20 +22,6 @@
 				(concat type-contract-principal (try! (slice? sequence start (+ start u22 contract-name-length))))
 			)
 		)
-	)
-)
-
-;; --- Public functions
-
-(define-read-only (prepend-length (input (buff 32)))
-	(concat (unwrap-panic (element-at (unwrap-panic (to-consensus-buff? (len input))) u16)) input)
-)
-
-;; This function will probably move to a different contract
-(define-read-only (peg-wallet-to-scriptpubkey (peg-wallet { version: (buff 1), hashbytes: (buff 32) }))
-	(begin
-		(asserts! (is-some (index-of? supported-address-versions (get version peg-wallet))) none)
-		(some (concat (if (is-eq (get version peg-wallet) version-P2TR) 0x01 0x00) (prepend-length (get hashbytes peg-wallet))))
 	)
 )
 
@@ -88,14 +53,8 @@
 	)
 )
 
-(define-read-only (get-current-peg-scriptpubkey)
-	(peg-wallet-to-scriptpubkey (unwrap! (contract-call? .sbtc-registry get-current-peg-wallet) none))
-)
-
-;; send the mined P2TR spend transaction
-;; It appears the current wire format of a peg-in is as follows:
-;; [op 1 byte] [version 1 byte] [address version 1 byte] [address 20 bytes] [length prefixed contract name] OP_DROP [32 public key] OP_CHECKSIG
 (define-public (complete-peg-in
+	(cycle uint)
 	(burn-height uint)
 	(tx (buff 4096))
 	(header (buff 80))
@@ -113,7 +72,7 @@
 		(burn-wtxid (get txid burn-tx))
 		;;(value (unwrap! (extract-peg-wallet-value (get outs burn-tx) (unwrap! (get-current-peg-scriptpubkey) err-not-a-peg-wallet)) err-peg-value-not-found))
 		;; Extract the vout index and value. (TODO: should get current peg scriptpubkey based on burn height.)
-		(vout-value (unwrap! (extract-peg-wallet-vout-value (get outs burn-tx) (unwrap! (get-current-peg-scriptpubkey) err-not-a-peg-wallet)) err-peg-value-not-found))
+		(vout-value (unwrap! (extract-peg-wallet-vout-value (get outs burn-tx) (unwrap! (contract-call? .sbtc-btc-tx-helper get-peg-wallet-scriptpubkey (some cycle)) err-not-a-peg-wallet)) err-peg-value-not-found))
 		;; Find the protocol unlock witness script (TODO: can inline this let var)
 		;; It also checks if the protocol opcode and version byte are correct (script must start with 0x3c00).
 		(unlock-script (unwrap! (contract-call? .sbtc-btc-tx-helper find-protocol-unlock-witness (unwrap! (element-at? (get witnesses burn-tx) (get n vout-value)) err-missing-witness)) err-unlock-script-not-found-or-invalid))

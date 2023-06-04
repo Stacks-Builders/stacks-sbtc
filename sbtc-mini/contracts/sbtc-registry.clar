@@ -58,10 +58,6 @@
 	(map-get? peg-wallets-cycle peg-wallet)
 )
 
-(define-read-only (get-current-peg-wallet)
-	(map-get? peg-wallets (contract-call? 'ST000000000000000000002AMW42H.pox-2 current-pox-reward-cycle))
-)
-
 (define-public (insert-cycle-peg-wallet (cycle uint) (peg-wallet { version: (buff 1), hashbytes: (buff 32) }))
 	(begin
 		(try! (is-protocol-caller contract-caller))

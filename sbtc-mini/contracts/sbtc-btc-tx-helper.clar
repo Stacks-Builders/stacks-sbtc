@@ -1,5 +1,10 @@
 ;; sbtc-btc-tx-helper will eventually be a custom clarity-bitcoin optimised for sBTC
 
+(define-constant version-P2WPKH 0x04)
+(define-constant version-P2WSH 0x05)
+(define-constant version-P2TR 0x06)
+(define-constant supported-address-versions (list version-P2WPKH version-P2WSH version-P2TR))
+
 (define-public (was-segwit-tx-mined
 	(burn-height uint) ;; bitcoin block height
 	(tx (buff 4096)) ;; tx to check
@@ -15,8 +20,7 @@
 	;; because they converge at some point
 	)
 	(begin
-		;; TODO: change to was-wtx-mined-compact
-		;;(try! (contract-call? .clarity-bitcoin was-tx-mined-compact burn-height ctx header { tx-index: tx-index, hashes: wproof, tree-depth: tree-depth }))
+		;; TODO: optimise to one call
 		(try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact
 			burn-height
 			tx
@@ -29,7 +33,6 @@
 			ctx
 			cproof
 		))
-		;; TODO: optimise to one call
 		(ok (merge
 			(try! (contract-call? .clarity-bitcoin parse-wtx tx))
 			{txid: (contract-call? .clarity-bitcoin get-txid tx)}
@@ -63,4 +66,21 @@
 ;; To be merged with the custom parse-wtx in the future
 (define-read-only (find-protocol-unlock-witness (witnesses (list 8 (buff 128))))
 	(fold find-unlock-witness-iter witnesses none)
+)
+
+(define-read-only (prepend-length (input (buff 32)))
+	(concat (unwrap-panic (element-at (unwrap-panic (to-consensus-buff? (len input))) u16)) input)
+)
+
+(define-read-only (hashbytes-to-scriptpubkey (peg-wallet { version: (buff 1), hashbytes: (buff 32) }))
+	(begin
+		(asserts! (is-some (index-of? supported-address-versions (get version peg-wallet))) none)
+		(some (concat (if (is-eq (get version peg-wallet) version-P2TR) 0x01 0x00) (prepend-length (get hashbytes peg-wallet))))
+	)
+)
+
+;; TODO: Do we need the optional and hard coupling with PoX?
+;; FIXME: Replace with latest PoX contract.
+(define-read-only (get-peg-wallet-scriptpubkey (cycle (optional uint)))
+	(hashbytes-to-scriptpubkey (unwrap! (contract-call? .sbtc-registry get-cycle-peg-wallet (default-to (contract-call? 'ST000000000000000000002AMW42H.pox-2 current-pox-reward-cycle) cycle)) none))
 )

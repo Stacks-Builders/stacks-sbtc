@@ -80,6 +80,11 @@ path = 'tests/sbtc-peg-in-processor_test.clar'
 clarity_version = 2
 epoch = 2.1
 
+[contracts.sbtc-btc-tx-helper_test]
+path = 'tests/sbtc-btc-tx-helper_test.clar'
+clarity_version = 2
+epoch = 2.1
+
 [repl.analysis]
 passes = ['check_checker']
 

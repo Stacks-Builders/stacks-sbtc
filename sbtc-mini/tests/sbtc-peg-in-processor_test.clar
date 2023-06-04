@@ -2,6 +2,7 @@
 (define-constant err-not-a-peg-wallet (err u501))
 (define-constant err-sequence-length-invalid (err u502))
 (define-constant err-stacks-pubkey-invalid (err u503))
+(define-constant err-burn-tx-already-processed (err u600))
 
 (define-constant wallet-1 'ST1SJ3DTE5DN7X54YDH5D64R3BCB6A2AG2ZQ8YPD5)
 (define-constant wallet-1-pubkey 0x03cd2cfdbd2ad9332828a7a13ef62cb999e063421c708e863a7ffed71fb61c88c9)
@@ -68,13 +69,10 @@
 		(try! (contract-call? .sbtc-registry insert-cycle-peg-wallet mock-peg-cycle mock-peg-wallet))
 		;; Mine a fake burnchain block that includes mock transactions
 		;;(try! (contract-call? .sbtc-testnet-debug-controller simulate-mine-solo-burnchain-block mock-burnchain-height (list mock-tx-1)))
-		(unwrap! (contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash mock-burnchain-height mock-block-header-hash-1-be) (err u1122))
+		(unwrap! (contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash mock-burnchain-height mock-block-header-hash-1-be) (err u112233))
 		(ok true)
 	)
 )
-
-;; @assert-event print {data: {expiry-burn-height: u17, peg-wallet: {hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699, version: 0x01}, recipient: ST000000000000000000002AMW42H, value: u100}, event: "peg-in", wtxid: 0x0011223344556677889900112233445566778899001122334455667788990011}
-
 
 (define-public (test-extract-principal)
 	(ok (asserts!
@@ -126,6 +124,7 @@
 ;; @mine-blocks-before 5
 (define-public (test-peg-in-reveal)
 	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
+			mock-peg-cycle
 			mock-burnchain-height ;; burn-height
 			mock-tx-1 ;; tx
 			mock-block-header-1 ;; header
@@ -135,6 +134,7 @@
 			mock-witness-root-hash-1-le
 			mock-coinbase-witness-reserved-data
 			mock-coinbase-tx-1 ;; ctx
+			;; FIXME: something strange here, can pass any buff in the list and the test will pass.
 			(list mock-txid-1) ;; cproof
 			)))
 		(unwrap! result (err {err: "Expect ok, got err", actual: (some result)}))
@@ -143,11 +143,41 @@
 	)
 )
 
-(define-public (test-temp-find-protocol-unlock-witness)
-  (ok (asserts! (is-eq
-      (some 0x183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac)
-      (contract-call? .sbtc-btc-tx-helper find-protocol-unlock-witness (list 0x000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f 0x183c001a7321b74e2b6a7e949e6c4ad313035b16650950170075200046422d30ec92c568e21be4b9579cfed8e71ba0702122b014755ae0e23e3563ac 0xc01dae61a4a8f841952be3a511502d4f56e889ffa0685aa0098773ea2d4309f62474708f439116be919de13c6d3200d2305fcbdf5a9e7d2c079e85b427bb110e90))
-      )
-    (err "Could not find the witness (should have returned the second item)")
-  ))
+;; @name Cannot submit the same proof twice
+;; @mine-blocks-before 5
+(define-public (test-peg-in-reveal-no-repeat)
+	(let ((result (contract-call? .sbtc-peg-in-processor complete-peg-in
+			mock-peg-cycle
+			mock-burnchain-height ;; burn-height
+			mock-tx-1 ;; tx
+			mock-block-header-1 ;; header
+			u1 ;; tx-index
+			u1 ;; tree-depth
+			(list mock-coinbase-wtxid-1) ;; wproof
+			mock-witness-root-hash-1-le
+			mock-coinbase-witness-reserved-data
+			mock-coinbase-tx-1 ;; ctx
+			;; FIXME: something strange here, can pass any buff in the list and the test will pass.
+			(list mock-txid-1) ;; cproof
+			))
+		(result2 (contract-call? .sbtc-peg-in-processor complete-peg-in
+			mock-peg-cycle
+			mock-burnchain-height ;; burn-height
+			mock-tx-1 ;; tx
+			mock-block-header-1 ;; header
+			u1 ;; tx-index
+			u1 ;; tree-depth
+			(list mock-coinbase-wtxid-1) ;; wproof
+			mock-witness-root-hash-1-le
+			mock-coinbase-witness-reserved-data
+			mock-coinbase-tx-1 ;; ctx
+			;; FIXME: something strange here, can pass any buff in the list and the test will pass.
+			(list mock-txid-1) ;; cproof
+			)))
+		(unwrap! result (err {err: "Expect ok, got err", actual: (some result)}))
+		(asserts! (is-eq (get-sbtc-balance wallet-1) mock-value-tx-1) (err {err: "User did not receive the expected sBTC", actual: none}))
+		(asserts! (is-eq result2 err-burn-tx-already-processed) (err {err: "Second call should have failed", actual: (some result2)}))
+		(ok true)
+	)
 )
+
