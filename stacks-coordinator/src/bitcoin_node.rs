@@ -82,13 +82,15 @@ impl BitcoinNode for LocalhostBitcoinNode {
     }
 
     fn load_wallet(&self, address: &BitcoinAddress) -> Result<(), Error> {
+        debug!("Loading bitcoin wallet...");
         let result = self.create_empty_wallet();
         if let Err(Error::RPCError(message)) = &result {
-            if !message.ends_with("Database already exists.\"") {
+            if message.contains("Database already exists") {
+                // If the database already exists, no problem. Just emit a warning.
+                warn!(message);
+            } else {
                 return result;
             }
-            // If the database already exists, no problem. Just emit a warning.
-            warn!(message);
         }
         // Import the address
         self.import_address(address)?;
@@ -97,6 +99,7 @@ impl BitcoinNode for LocalhostBitcoinNode {
 
     /// List the UTXOs filtered on a given address.
     fn list_unspent(&self, address: &BitcoinAddress) -> Result<Vec<UTXO>, Error> {
+        debug!("Retrieving utxos...");
         // Construct the params using defaults found at https://developer.bitcoin.org/reference/rpc/listunspent.html?highlight=listunspent
         let addresses: Vec<String> = vec![address.to_string()];
         let min_conf = 0i64;
@@ -135,7 +138,7 @@ impl LocalhostBitcoinNode {
             ureq::json!({"jsonrpc": "2.0", "id": "stx", "method": method, "params": params});
         let response = ureq::post(&self.bitcoind_api)
             .send_json(json_rpc)
-            .map_err(|e| Error::RPCError(e.to_string()))?;
+            .map_err(|e| Error::RPCError(parse_rpc_error(e)))?;
         let json_response = response.into_json::<serde_json::Value>()?;
         let json_result = json_response
             .get("result")
@@ -145,7 +148,7 @@ impl LocalhostBitcoinNode {
     }
 
     fn create_empty_wallet(&self) -> Result<(), Error> {
-        let wallet_name = "";
+        let wallet_name = "stacks_coordinator";
         let disable_private_keys = false;
         let blank = true;
         let passphrase = "";
@@ -237,6 +240,17 @@ impl LocalhostBitcoinNode {
                 "Could not parse safe".to_string(),
             ))?,
         })
+    }
+}
+
+fn parse_rpc_error(err: ureq::Error) -> String {
+    match err {
+        ureq::Error::Status(status, response) => format!(
+            "{} {}",
+            status,
+            response.into_string().unwrap_or_else(|e| e.to_string())
+        ),
+        ureq::Error::Transport(err) => err.to_string(),
     }
 }
 

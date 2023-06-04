@@ -21,6 +21,8 @@ frost-signer = { path = "../frost-signer" }
 serde = { version = "1.0", features = ["serde_derive"] }
 
 [dev-dependencies]
+rand_core = { workspace = true }
+rand = { workspace = true }
 relay-server = { path = "../relay-server" }
 test-utils = { path = "../test-utils" }
 

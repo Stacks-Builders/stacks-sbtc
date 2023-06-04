@@ -1,3 +1,15 @@
+use blockstack_lib::{
+    address::{C32_ADDRESS_VERSION_MAINNET_SINGLESIG, C32_ADDRESS_VERSION_TESTNET_SINGLESIG},
+    chainstate::stacks::TransactionVersion,
+};
+
+pub fn address_version(version: &TransactionVersion) -> u8 {
+    match version {
+        TransactionVersion::Mainnet => C32_ADDRESS_VERSION_MAINNET_SINGLESIG,
+        TransactionVersion::Testnet => C32_ADDRESS_VERSION_TESTNET_SINGLESIG,
+    }
+}
+
 #[cfg(test)]
 pub mod test {
     use blockstack_lib::{

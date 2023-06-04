@@ -11,6 +11,7 @@ use frost_signer::{
     },
 };
 use hashbrown::HashSet;
+use p256k1::ecdsa::PublicKey;
 use tracing::{debug, info, warn};
 use wsts::{
     bip340::{Error as Bip340Error, SchnorrProof},
@@ -19,9 +20,6 @@ use wsts::{
     errors::AggregatorError,
     v1, Point, Scalar,
 };
-
-pub const DEVNET_COORDINATOR_ID: u32 = 0;
-pub const DEVNET_COORDINATOR_DKG_ID: u64 = 0; //TODO: Remove, this is a correlation id
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -66,6 +64,7 @@ pub struct Coordinator<Network: NetListen> {
     signature_shares: BTreeMap<u32, Vec<SignatureShare>>,
     aggregate_public_key: Point,
     network_private_key: Scalar,
+    public_key: PublicKey,
 }
 
 impl<Network: NetListen> Coordinator<Network> {
@@ -85,6 +84,7 @@ impl<Network: NetListen> Coordinator<Network> {
             aggregate_public_key: Point::default(),
             signature_shares: Default::default(),
             network_private_key: config.network_private_key,
+            public_key: config.coordinator_public_key,
         })
     }
 }
@@ -380,6 +380,10 @@ where
         }
     }
 
+    pub fn set_aggregate_public_key(&mut self, public_key: Point) {
+        self.aggregate_public_key = public_key;
+    }
+
     fn wait_for_public_shares(&mut self) -> Result<Point, Error> {
         let mut ids_to_await: HashSet<u32> = (1..=self.total_signers).collect();
 
@@ -464,51 +468,132 @@ where
             .build();
         backoff::retry_notify(backoff_timer, get_next_message, notify).map_err(|_| Error::Timeout)
     }
+
+    pub fn public_key(&self) -> &PublicKey {
+        &self.public_key
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::DEVNET_COORDINATOR_ID;
+
+    use frost_signer::{
+        config::{Config, PublicKeys, SignerKeyIds},
+        logging,
+        net::{HttpNet, HttpNetListen},
+        signer::Signer,
+    };
+
     use hashbrown::HashMap;
-    use test_utils::Process;
+    use p256k1::{ecdsa, scalar::Scalar};
+    use rand::rngs::StdRng;
+    use rand_core::{OsRng, RngCore, SeedableRng};
+    use relay_server::Server as RelayServer;
+    use std::{env, thread};
+    use test_utils::parse_env;
+
+    fn create_signer_key_ids(signer_id: u32, keys_per_signer: u32) -> Vec<u32> {
+        (0..keys_per_signer)
+            .map(|i| keys_per_signer * signer_id + i + 1)
+            .collect()
+    }
+
+    fn create_public_keys(signer_private_keys: &Vec<Scalar>, keys_per_signer: u32) -> PublicKeys {
+        let signer_id_keys = signer_private_keys
+            .iter()
+            .enumerate()
+            .map(|(i, key)| ((i + 1) as u32, ecdsa::PublicKey::new(key).unwrap()))
+            .collect::<HashMap<u32, ecdsa::PublicKey>>();
+
+        let key_ids = signer_id_keys
+            .iter()
+            .flat_map(|(signer_id, signer_key)| {
+                (0..keys_per_signer).map(|i| (keys_per_signer * *signer_id - i, signer_key.clone()))
+            })
+            .collect::<HashMap<u32, ecdsa::PublicKey>>();
+
+        PublicKeys {
+            signers: signer_id_keys,
+            key_ids,
+        }
+    }
 
     #[test]
     fn integration_test() {
-        let bin = if cfg!(debug_assertions) {
-            "../target/debug"
-        } else {
-            "../target/release"
-        };
+        env::set_var("RUST_LOG", "info");
+        logging::initiate_tracing_subscriber();
 
-        let log_info: HashMap<String, String> =
-            HashMap::from([("RUST_LOG".to_string(), "info".to_string())]);
+        let state_file = "frost.state.bin".to_string();
+        let relay_url = "http://localhost:9776".to_string();
+        let num_signers = parse_env::<u32>("num_signers", 6);
+        let keys_per_signer = parse_env::<u32>("keys_per_signer", 3);
+        let keys_threshold = parse_env::<u32>("keys_threshold", 15);
+        let mut osrng = OsRng::default();
+        let seed = osrng.next_u64();
 
-        let _relay_server = Process::new(&format!("{bin}/relay-server"), &[], &HashMap::new());
-        let _signer1 = Process::new(
-            &format!("{bin}/frost-signer"),
-            &["--id", "1", "--config", "../frost-signer/conf/signer.toml"],
-            &HashMap::new(),
-        );
-        let _signer2 = Process::new(
-            &format!("{bin}/frost-signer"),
-            &["--id", "2", "--config", "../frost-signer/conf/signer.toml"],
-            &HashMap::new(),
-        );
-        let _signer3 = Process::new(
-            &format!("{bin}/frost-signer"),
-            &["--id", "3", "--config", "../frost-signer/conf/signer.toml"],
-            &HashMap::new(),
-        );
-        let mut coordinator = Process::new(
-            &format!("{bin}/frost-coordinator"),
-            &["--config", "../frost-signer/conf/signer.toml", "dkg-sign"],
-            &log_info,
-        );
+        println!("seed: {}", seed);
 
-        let exit_status = coordinator
-            .child
-            .wait()
-            .expect("Failed to wait for coordinator");
+        let mut rng = StdRng::seed_from_u64(seed);
+        let coordinator_private_key = Scalar::random(&mut rng);
+        let coordinator_public_key = ecdsa::PublicKey::new(&coordinator_private_key).unwrap();
+        let signer_private_keys = (0..num_signers)
+            .map(|_| Scalar::random(&mut rng))
+            .collect::<Vec<Scalar>>();
+        let signer_key_ids = (0..num_signers)
+            .map(|i| (i + 1, create_signer_key_ids(i, keys_per_signer)))
+            .collect::<SignerKeyIds>();
+        let public_keys = create_public_keys(&signer_private_keys, keys_per_signer);
+        let coordinator_config = Config::new(
+            keys_threshold,
+            coordinator_public_key,
+            public_keys.clone(),
+            signer_key_ids.clone(),
+            coordinator_private_key,
+            state_file.clone(),
+            relay_url.clone(),
+        );
+        let signer_configs = signer_private_keys
+            .iter()
+            .map(|k| {
+                Config::new(
+                    keys_threshold,
+                    coordinator_public_key,
+                    public_keys.clone(),
+                    signer_key_ids.clone(),
+                    k.clone(),
+                    state_file.clone(),
+                    relay_url.clone(),
+                )
+            })
+            .collect::<Vec<Config>>();
 
-        assert!(exit_status.success());
+        let net: HttpNet = HttpNet::new(relay_url.clone());
+        let coordinator_net_listen: HttpNetListen = HttpNetListen::new(net.clone(), vec![]);
+
+        thread::spawn(|| RelayServer::run("127.0.0.1:9776"));
+
+        for i in 0..num_signers {
+            let config = signer_configs[i as usize].clone();
+            thread::spawn(move || {
+                let mut signer = Signer::new(config, i + 1);
+                signer.start_p2p_sync().unwrap();
+            });
+        }
+
+        let mut coordinator = Coordinator::new(
+            DEVNET_COORDINATOR_ID,
+            &coordinator_config,
+            coordinator_net_listen,
+        )
+        .unwrap();
+        let coordinator_handle = thread::spawn(move || {
+            coordinator.run(&Command::DkgSign {
+                msg: vec![0, 1, 2, 3],
+            })
+        });
+
+        coordinator_handle.join().unwrap().unwrap();
     }
 }

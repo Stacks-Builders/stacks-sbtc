@@ -7,13 +7,17 @@ use hashbrown::HashMap;
 use libc::pid_t;
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use std::fs::{create_dir, remove_dir_all};
-use std::net::TcpListener;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::str::FromStr;
-use std::thread::{self, sleep};
-use std::time::{Duration, SystemTime};
+use std::{
+    env,
+    fmt::Debug,
+    fs::{create_dir, remove_dir_all},
+    net::TcpListener,
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    str::FromStr,
+    thread::{self, sleep},
+    time::{Duration, SystemTime},
+};
 use ureq::serde::Serialize;
 use url::Url;
 
@@ -285,4 +289,14 @@ pub fn sign_transaction(
     tx.input[0]
         .witness
         .push(bitcoin::psbt::serialize::Serialize::serialize(public_key));
+}
+
+pub fn parse_env<T: FromStr>(var: &str, default: T) -> T
+where
+    <T as FromStr>::Err: Debug,
+{
+    match env::var(var) {
+        Ok(var) => var.parse::<T>().unwrap(),
+        Err(_) => default,
+    }
 }

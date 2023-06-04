@@ -10,6 +10,7 @@ mod tests {
         let _signers = [
             SigningRound::new(
                 7,
+                5,
                 10,
                 0,
                 [0, 1].to_vec(),
@@ -18,6 +19,7 @@ mod tests {
             ),
             SigningRound::new(
                 7,
+                5,
                 10,
                 0,
                 [2, 3].to_vec(),
@@ -26,6 +28,7 @@ mod tests {
             ),
             SigningRound::new(
                 7,
+                5,
                 10,
                 0,
                 [4, 5, 6, 7, 8].to_vec(),
@@ -34,6 +37,7 @@ mod tests {
             ),
             SigningRound::new(
                 7,
+                5,
                 10,
                 0,
                 [10].to_vec(),

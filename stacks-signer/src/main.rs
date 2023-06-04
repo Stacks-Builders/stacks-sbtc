@@ -10,7 +10,7 @@ fn main() {
     let cli = Cli::parse();
 
     // Initialize logging
-    logging::initiate_tracing_subscriber().unwrap();
+    logging::initiate_tracing_subscriber();
 
     // Determine what action the caller wishes to perform
     match cli.command {

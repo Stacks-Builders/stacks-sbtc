@@ -1,4 +1,4 @@
-use crate::config::{Config, SignerKeys};
+use crate::config::{Config, PublicKeys};
 use crate::net::{Error as HttpNetError, HttpNet, HttpNetListen, Message, Net, NetListen};
 use crate::signing_round::{Error as SigningRoundError, MessageTypes, Signable, SigningRound};
 use p256k1::ecdsa;
@@ -21,7 +21,7 @@ impl Signer {
     }
 
     pub fn start_p2p_sync(&mut self) -> Result<(), Error> {
-        let signer_keys = self.config.signer_keys.clone();
+        let public_keys = self.config.public_keys.clone();
         let coordinator_public_key = self.config.coordinator_public_key;
 
         //Create http relay
@@ -32,7 +32,7 @@ impl Signer {
 
         // start p2p sync
         let id = self.signer_id;
-        spawn(move || poll_loop(net_queue, tx, id, signer_keys, coordinator_public_key));
+        spawn(move || poll_loop(net_queue, tx, id, public_keys, coordinator_public_key));
 
         // listen to p2p messages
         self.start_signing_round(&net, rx)
@@ -49,30 +49,38 @@ impl Signer {
                 let msg = Message {
                     msg: out.clone(),
                     sig: match out {
-                        MessageTypes::DkgBegin(msg) | MessageTypes::DkgPrivateBegin(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::DkgEnd(msg) | MessageTypes::DkgPublicEnd(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::DkgPublicShare(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::DkgPrivateShares(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::NonceRequest(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::NonceResponse(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::SignShareRequest(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
-                        MessageTypes::SignShareResponse(msg) => {
-                            msg.sign(&network_private_key).expect("").to_vec()
-                        }
+                        MessageTypes::DkgBegin(msg) | MessageTypes::DkgPrivateBegin(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign DkgBegin")
+                            .to_vec(),
+                        MessageTypes::DkgEnd(msg) | MessageTypes::DkgPublicEnd(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign DkgEnd")
+                            .to_vec(),
+                        MessageTypes::DkgPublicShare(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign DkgPublicShare")
+                            .to_vec(),
+                        MessageTypes::DkgPrivateShares(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign DkgPrivateShare")
+                            .to_vec(),
+                        MessageTypes::NonceRequest(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign NonceRequest")
+                            .to_vec(),
+                        MessageTypes::NonceResponse(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign NonceResponse")
+                            .to_vec(),
+                        MessageTypes::SignShareRequest(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign SignShareRequest")
+                            .to_vec(),
+                        MessageTypes::SignShareResponse(msg) => msg
+                            .sign(&network_private_key)
+                            .expect("failed to sign SignShareResponse")
+                            .to_vec(),
                     },
                 };
                 net.send_message(msg)?;
@@ -106,7 +114,7 @@ fn poll_loop(
     mut net: HttpNetListen,
     tx: Sender<Message>,
     id: u32,
-    signer_keys: SignerKeys,
+    public_keys: PublicKeys,
     coordinator_public_key: ecdsa::PublicKey,
 ) -> Result<(), Error> {
     const BASE_TIMEOUT: u64 = 2;
@@ -126,7 +134,7 @@ fn poll_loop(
             }
             Some(m) => {
                 timeout = 0;
-                if verify_msg(&m, &signer_keys, &coordinator_public_key) {
+                if verify_msg(&m, &public_keys, &coordinator_public_key) {
                     // Only send verified messages down the pipe
                     tx.send(m)?;
                 }
@@ -138,7 +146,7 @@ fn poll_loop(
 
 fn verify_msg(
     m: &Message,
-    signer_keys: &SignerKeys,
+    public_keys: &PublicKeys,
     coordinator_public_key: &ecdsa::PublicKey,
 ) -> bool {
     match &m.msg {
@@ -149,7 +157,7 @@ fn verify_msg(
             }
         }
         MessageTypes::DkgEnd(msg) | MessageTypes::DkgPublicEnd(msg) => {
-            if let Some(public_key) = signer_keys.signers.get(&msg.signer_id) {
+            if let Some(public_key) = public_keys.signers.get(&msg.signer_id) {
                 debug!("HERE WE GO");
                 debug!("{:?}", public_key.to_bytes());
 
@@ -166,7 +174,7 @@ fn verify_msg(
             }
         }
         MessageTypes::DkgPublicShare(msg) => {
-            if let Some(public_key) = signer_keys.key_ids.get(&msg.party_id) {
+            if let Some(public_key) = public_keys.key_ids.get(&msg.party_id) {
                 if !msg.verify(&m.sig, public_key) {
                     warn!("Received a DkgPublicShare message with an invalid signature.");
                     return false;
@@ -184,9 +192,9 @@ fn verify_msg(
             // in Frost V4 to enable easy indexing hence ID + 1
             // TODO: Once Frost V5 is released, this off by one adjustment will no longer be required
             let key_id = msg.key_id + 1;
-            if let Some(public_key) = signer_keys.key_ids.get(&key_id) {
+            if let Some(public_key) = public_keys.key_ids.get(&key_id) {
                 if !msg.verify(&m.sig, public_key) {
-                    warn!("Received a DkgPrivateShares message with an invalid signature.");
+                    warn!("Received a DkgPrivateShares message with an invalid signature from key_id {} key {}", msg.key_id, &public_key);
                     return false;
                 }
             } else {
@@ -204,7 +212,7 @@ fn verify_msg(
             }
         }
         MessageTypes::NonceResponse(msg) => {
-            if let Some(public_key) = signer_keys.signers.get(&msg.signer_id) {
+            if let Some(public_key) = public_keys.signers.get(&msg.signer_id) {
                 if !msg.verify(&m.sig, public_key) {
                     warn!("Received a NonceResponse message with an invalid signature.");
                     return false;
@@ -224,7 +232,7 @@ fn verify_msg(
             }
         }
         MessageTypes::SignShareResponse(msg) => {
-            if let Some(public_key) = signer_keys.signers.get(&msg.signer_id) {
+            if let Some(public_key) = public_keys.signers.get(&msg.signer_id) {
                 if !msg.verify(&m.sig, public_key) {
                     warn!("Received a SignShareResponse message with an invalid signature.");
                     return false;
@@ -253,7 +261,7 @@ mod test {
     };
 
     use crate::{
-        config::SignerKeys,
+        config::PublicKeys,
         net::Message,
         signing_round::{
             DkgBegin, DkgEnd, DkgPrivateShares, DkgPublicShare, DkgStatus, MessageTypes,
@@ -275,7 +283,7 @@ mod test {
         coordinator_sec_key: Scalar,
         coordinator_pub_key: PublicKey,
         sec_keys: Vec<Scalar>,
-        signer_keys: SignerKeys,
+        public_keys: PublicKeys,
     }
 
     impl TestConfig {
@@ -285,7 +293,7 @@ mod test {
             let (sec_key1, pub_key1) = generate_key_pair();
             let (sec_key2, pub_key2) = generate_key_pair();
 
-            let signer_keys = SignerKeys {
+            let public_keys = PublicKeys {
                 signers: HashMap::from([(1, pub_key1), (2, pub_key2)]),
                 key_ids: HashMap::from([
                     (1, pub_key1),
@@ -298,7 +306,7 @@ mod test {
                 coordinator_sec_key,
                 coordinator_pub_key,
                 sec_keys: [sec_key1, sec_key2].to_vec(),
-                signer_keys,
+                public_keys,
             }
         }
     }
@@ -322,25 +330,25 @@ mod test {
         // Check with correct public key
         assert!(verify_msg(
             &dkg_begin,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
         assert!(verify_msg(
             &dkg_private_begin,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
         // Check with incorrect public key
         assert!(!verify_msg(
             &dkg_begin,
-            &config.signer_keys,
-            &config.signer_keys.key_ids.get(&1).unwrap(),
+            &config.public_keys,
+            &config.public_keys.key_ids.get(&1).unwrap(),
         ));
         assert!(!verify_msg(
             &dkg_private_begin,
-            &config.signer_keys,
-            &config.signer_keys.key_ids.get(&1).unwrap(),
+            &config.public_keys,
+            &config.public_keys.key_ids.get(&1).unwrap(),
         ));
     }
 
@@ -367,13 +375,13 @@ mod test {
 
         assert!(verify_msg(
             &dkg_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
         assert!(verify_msg(
             &dkg_public_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
@@ -388,13 +396,13 @@ mod test {
 
         assert!(!verify_msg(
             &dkg_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
         assert!(!verify_msg(
             &dkg_public_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -420,12 +428,12 @@ mod test {
 
         assert!(!verify_msg(
             &dkg_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
         assert!(!verify_msg(
             &dkg_public_end,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -453,7 +461,7 @@ mod test {
         };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
@@ -464,7 +472,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -489,7 +497,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -511,7 +519,7 @@ mod test {
         };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
@@ -521,7 +529,7 @@ mod test {
 
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -540,7 +548,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -561,14 +569,14 @@ mod test {
         let message = Message { msg, sig };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
         // Let's check with the wrong pub key
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
-            &config.signer_keys.key_ids.get(&1).unwrap(),
+            &config.public_keys,
+            &config.public_keys.key_ids.get(&1).unwrap(),
         ));
     }
 
@@ -592,7 +600,7 @@ mod test {
         };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
@@ -602,7 +610,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -624,7 +632,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -655,15 +663,15 @@ mod test {
         let message = Message { msg, sig };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
         // Let's check the wrong pub key...
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
-            &config.signer_keys.key_ids.get(&1).unwrap()
+            &config.public_keys,
+            &config.public_keys.key_ids.get(&1).unwrap()
         ));
     }
 
@@ -687,7 +695,7 @@ mod test {
         };
         assert!(verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
 
@@ -696,7 +704,7 @@ mod test {
         let message = Message { msg, sig };
         assert!(!verify_msg(
             &message,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }
@@ -717,7 +725,7 @@ mod test {
         let sign_share_response = Message { msg, sig };
         assert!(!verify_msg(
             &sign_share_response,
-            &config.signer_keys,
+            &config.public_keys,
             &config.coordinator_pub_key
         ));
     }

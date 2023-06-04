@@ -1,0 +1,10 @@
+http_relay_url = "http://localhost:9776"
+keys_threshold = 4
+frost_state_file = "frost.signer2.state.bin"
+network_private_key = "F2BmyfiCuuC7665kwCFw5SgZ8GA6j9wpssn6sqvHBbpX"
+signers =  [
+    {public_key = "xvwd4f8L4oAmAXNhqMvQvbMiniCSeNH1rD9ZwCEEf7b6", key_ids = [1, 2]},
+    {public_key = "cLuu4PSQLxi6bjFYGyTvyAFRUe3XfJL8mQ99Bd9A8mv9", key_ids = [3, 4]},
+    {public_key = "gKCpZS42qdyVh9qQLtjbJYg8reEhjgyho6z6ghmLXZUx", key_ids = [5, 6]}
+]
+coordinator_public_key = "2A1tcY8RFby6pTNk8wQ3qGPCgWRXTL24yMwmcXiG7tKCZ"

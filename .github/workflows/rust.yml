@@ -96,7 +96,7 @@ jobs:
         run: deno cache ./yarpc/js/stacks/transactions.ts
       - run: cargo install cargo-tarpaulin
       # - run: cargo tarpaulin
-      - run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml --avoid-cfg-tarpaulin --exclude frost-coordinator
+      - run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Xml --avoid-cfg-tarpaulin
       - uses: codecov/codecov-action@v3
         with:
           fail_ci_if_error: true

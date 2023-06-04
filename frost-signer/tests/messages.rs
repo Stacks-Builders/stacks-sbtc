@@ -26,7 +26,7 @@ fn dkg_begin() {
     // part of the DKG_BEGIN process is to fill the commitments array
     assert_eq!(
         signer.commitments.len(),
-        usize::try_from(signer.total).unwrap()
+        usize::try_from(signer.total_keys).unwrap()
     );
 }
 

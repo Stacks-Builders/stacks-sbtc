@@ -2,7 +2,9 @@ use crate::bitcoin_node::{self, UTXO};
 use crate::bitcoin_wallet::{BitcoinWallet as BitcoinWalletStruct, Error as BitcoinWalletError};
 use crate::stacks_node::{self, PegOutRequestOp};
 use crate::stacks_wallet::{Error as StacksWalletError, StacksWallet as StacksWalletStruct};
+use bitcoin::secp256k1::PublicKey;
 use bitcoin::Address as BitcoinAddress;
+use blockstack_lib::types::chainstate::StacksPublicKey;
 use blockstack_lib::{chainstate::stacks::StacksTransaction, types::chainstate::StacksAddress};
 use std::fmt::Debug;
 
@@ -27,14 +29,23 @@ pub trait StacksWallet {
         op: &stacks_node::PegOutRequestOp,
         nonce: u64,
     ) -> Result<StacksTransaction, Error>;
-    /// Builds a verified signed transaction for setting the sBTC wallet address
-    fn build_set_btc_address_transaction(
+    /// Builds a verified signed transaction for setting the sBTC wallet public key
+    fn build_set_bitcoin_wallet_public_key_transaction(
         &self,
-        address: &BitcoinAddress,
+        public_key: &PublicKey,
+        nonce: u64,
+    ) -> Result<StacksTransaction, Error>;
+    /// Builds a verified signed transaction for setting the sBTC coordinator data
+    fn build_set_coordinator_data_transaction(
+        &self,
+        address: &StacksAddress,
+        public_key: &StacksPublicKey,
         nonce: u64,
     ) -> Result<StacksTransaction, Error>;
     /// Returns the sBTC address for the wallet
     fn address(&self) -> &StacksAddress;
+    /// Returns the sBTC public key for the wallet
+    fn public_key(&self) -> &StacksPublicKey;
 }
 
 pub trait BitcoinWallet {
@@ -55,8 +66,6 @@ pub trait PegWallet {
     fn stacks(&self) -> &Self::StacksWallet;
     fn bitcoin(&self) -> &Self::BitcoinWallet;
 }
-
-pub type PegWalletAddress = bitcoin::Address;
 
 pub struct WrapPegWallet {
     pub(crate) bitcoin_wallet: BitcoinWalletStruct,

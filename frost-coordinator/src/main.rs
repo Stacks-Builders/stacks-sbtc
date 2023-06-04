@@ -1,7 +1,6 @@
 use clap::Parser;
 
-use frost_coordinator::coordinator::Command;
-use frost_coordinator::create_coordinator;
+use frost_coordinator::{coordinator::Command, create_coordinator_from_path};
 use frost_signer::logging;
 use tracing::{error, warn};
 
@@ -17,10 +16,10 @@ pub struct Cli {
 }
 
 fn main() {
-    logging::initiate_tracing_subscriber().unwrap();
+    logging::initiate_tracing_subscriber();
 
     let cli = Cli::parse();
-    match create_coordinator(cli.config) {
+    match create_coordinator_from_path(cli.config) {
         Ok(mut coordinator) => {
             let result = coordinator.run(&cli.command);
             if let Err(e) = result {

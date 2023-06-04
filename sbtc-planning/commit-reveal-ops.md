@@ -49,13 +49,15 @@ The remaining data must not take more than 77 bytes of block space.
 The data format is the same as the corresponding `OP_RETURN` data format for the
 specific sBTC op minus the first two magic bytes, which must still be present
 in an `OP_RETURN` output of the reveal transaction. In addition to this, the data
-must also specify the maximum fee the Revealer is allowed to spend on the reveal
-transaction.
+must also specify a fee subsidy reserving funds the Revealer is allowed to spend on
+transaction fees. The total length of the data is `n+8` where `n` is the length
+of the specific sBTC payload and opcode (max 78 bytes), and the final 8 bytes is
+the big-endian encoded unsigned fee subsidy.
 
 ```
-0  1                            78             86
+0  1                            n            n + 8
 |--|----------------------------|--------------|
- op             data               reveal fee
+ op             data               fee subsidy
 ```
 
 The _reveal_ transaction must consume a UTXO from a _commit_ transaction as its first input.

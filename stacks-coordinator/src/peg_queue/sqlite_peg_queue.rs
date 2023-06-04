@@ -6,7 +6,6 @@ use blockstack_lib::burnchains::Txid;
 use blockstack_lib::types::chainstate::BurnchainHeaderHash;
 use blockstack_lib::util::HexError;
 
-use crate::config::Config;
 use crate::peg_queue::{Error as PegQueueError, PegQueue, SbtcOp};
 use crate::stacks_node::{Error as StacksNodeError, PegInOp, PegOutRequestOp, StacksNode};
 
@@ -22,10 +21,6 @@ pub enum Error {
     HexError(#[from] HexError),
     #[error("Did not recognize status: {0}")]
     InvalidStatusError(String),
-    #[error("Entry does not exist")]
-    EntryDoesNotExist,
-    #[error("Missing Start Block Height")]
-    MissingStartBlockHeight,
 }
 
 // Workaround to allow non-perfect conversions in `Entry::from_row`
@@ -40,19 +35,6 @@ pub struct SqlitePegQueue {
     start_block_height: u64,
 }
 
-impl TryFrom<&Config> for SqlitePegQueue {
-    type Error = Error;
-    fn try_from(cfg: &Config) -> Result<Self, Error> {
-        let start_block_height = cfg
-            .start_block_height
-            .ok_or_else(|| Error::MissingStartBlockHeight)?;
-        if let Some(path) = &cfg.rusqlite_path {
-            Self::new(path, start_block_height)
-        } else {
-            Self::in_memory(start_block_height)
-        }
-    }
-}
 impl SqlitePegQueue {
     pub fn new<P: AsRef<Path>>(path: P, start_block_height: u64) -> Result<Self, Error> {
         Self::from_connection(RusqliteConnection::open(path)?, start_block_height)
