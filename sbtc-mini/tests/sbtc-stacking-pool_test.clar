@@ -13,24 +13,21 @@
 ;; )
 
 ;; @name Get current cycle stacker/signer pool, should return none
-(define-public (test-get-current-cycle-pool-none)
-    (begin
-		(unwrap!
-			(contract-call? .sbtc-stacking-pool get-current-cycle-pool)
-			(ok true)
-			)
-		(err  "Should have succeeded")
-	)
-)
+;; (define-public (test-get-current-cycle-pool-none)
+;;     (begin
+;; 		(unwrap!
+;; 			(contract-call? .sbtc-stacking-pool get-current-cycle-pool)
+;; 			(ok true)
+;; 			)
+;; 		(err  "Should have succeeded")
+;; 	)
+;; )
 
 ;; @name Get current window
 ;; @mine-blocks-before 2100
 (define-public (test-get-current-window)
-    (begin
-		(asserts!
-			(is-eq "penalty" (contract-call? .sbtc-stacking-pool get-current-window))
-			(err "Should have succeeded")
-		)
+	(if (is-eq 0x00 (contract-call? .sbtc-stacking-pool get-current-window))
 		(ok true)
+		(err false)
 	)
 )

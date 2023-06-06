@@ -75,7 +75,7 @@
             (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof) err-tx-not-mined)
         
             ;; Assert we're in the transfer window
-            (asserts! (is-eq (contract-call? .sbtc-stacking-pool get-current-window) "transfer")  err-not-in-transfer-window)
+            (asserts! (is-eq (contract-call? .sbtc-stacking-pool get-current-window) 0x03)  err-not-in-transfer-window)
 
             ;; Assert that balance of previous-threshold-wallet wasn't already transferred
             (asserts! previous-pool-balance-transferred err-balance-already-transferred)
@@ -94,7 +94,7 @@
 
             ;; Assert that amount transferred > sbtc-registry peg-balance
             (asserts! 
-                (< cycle-peg-balance
+                (<= cycle-peg-balance
                     (+ 
                         (get value tx-output-0)
                         (get value tx-output-1)

@@ -150,12 +150,3 @@
 		(ok request)
 	)
 )
-
-;; Called through the sbtc-stacking-pool contract
-(define-public (penalty-peg-state-change)
-	(begin 
-		(try! (is-protocol-caller contract-caller))
-		;; not sure if additional checks needed
-		(ok (var-set peg-state false))
-	)
-)
