@@ -175,24 +175,6 @@
 	)
 )
 
-;; TODO
-;; (define-public (simulate-mine-solo-burnchain-block-segwit (burn-height uint) (segwit-transactions (list 3 (buff 4096))))
-;; 	(contract-call? .clarity-bitcoin mock-add-burnchain-block-header-hash burn-height
-;; 		(reverse-buff32 (calculate-solo-burnchain-header-hash
-;; 			(unwrap! (calculate-merkle-branch?
-;; 				(calculate-merkle-branch?
-;; 					(calculate-internal-txid? (some (generate-segwit-coinbase-transaction)))
-;; 					(calculate-internal-txid? (element-at? segwit-transactions u0))
-;; 				)
-;; 				(calculate-merkle-branch?
-;; 					(calculate-internal-txid? (element-at? segwit-transactions u1))
-;; 					(calculate-internal-txid? (element-at? segwit-transactions u2))
-;; 				)
-;; 			) err-no-transactions)
-;; 		)
-;; 	))
-;; )
-
 ;; Some test vectors:
 
 ;; coinbase tx: 0x02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff23036f18250418b848644d65726d61696465722046545721010000686d20000000000000ffffffff02edfe250000000000160014c035e789d9efffa10aa92e93f48f29b8cfb224c20000000000000000266a24aa21a9ed260ac9521c6b0c1b09e438319b5cb3377911764f156e44da61b1ab820f75104c00000000

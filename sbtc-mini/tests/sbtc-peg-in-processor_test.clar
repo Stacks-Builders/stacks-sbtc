@@ -101,25 +101,6 @@
 	))
 )
 
-;; @name Can extract data from a transaction and unlock script
-;; (define-public (disabled-test-extract-data)
-;; 	;; TODO
-;; 	(let (
-;; 		(result (contract-call? .sbtc-peg-in-processor extract-data 0x mock-unlock-script-1))
-;; 		(reference (ok {
-;; 			recipient: wallet-1,
-;; 			value: mock-value-tx-1,
-;; 			expiry-burn-height: (+ burn-block-height u10),
-;; 			;;peg-wallet: { version: 0x01, hashbytes: 0x0011223344556699001122334455669900112233445566990011223344556699}
-;; 		}))
-;; 		)
-;; 		(ok (asserts!
-;; 			(is-eq result reference)
-;; 			(err {err: "Expected to be equal", expected: reference, actual: result}))
-;; 		)
-;; 	)
-;; )
-
 ;; @name Test peg-in reveal proof (mints sBTC)
 ;; @mine-blocks-before 5
 (define-public (test-peg-in-reveal)

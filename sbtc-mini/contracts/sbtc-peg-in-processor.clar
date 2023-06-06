@@ -25,20 +25,7 @@
 	)
 )
 
-;; (define-read-only (extract-peg-wallet-value (outs (list 8 { value: uint, scriptPubKey: (buff 128) })) (peg-wallet-scriptpubkey (buff 128)))
-;; 	(some (+
-;; 		(match (element-at? outs u0) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u1) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u2) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u3) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u4) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u5) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u6) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 		(match (element-at? outs u7) out (if (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey) (get value out) u0) u0)
-;; 	))
-;; )
-
-;; TODO: allow to process multiple reveals at once?
+;; Bitcoin transactions must only contain one reveal per transaction.
 (define-read-only (extract-peg-wallet-vout-value (outs (list 8 { value: uint, scriptPubKey: (buff 128) })) (peg-wallet-scriptpubkey (buff 128)))
 	(begin
 		(match (element-at? outs u0) out (asserts! (not (is-eq (get scriptPubKey out) peg-wallet-scriptpubkey)) (some {n: u0, value: (get value out)})) false)
