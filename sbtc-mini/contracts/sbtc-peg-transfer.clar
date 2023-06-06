@@ -69,6 +69,8 @@
             (tx-output-5 (default-to {value: u0, scriptPubKey: current-threshold-hashbytes} (element-at tx-outputs u5)))
             (tx-output-6 (default-to {value: u0, scriptPubKey: current-threshold-hashbytes} (element-at tx-outputs u6)))
             (tx-output-7 (default-to {value: u0, scriptPubKey: current-threshold-hashbytes} (element-at tx-outputs u7)))
+
+            ;; versions + hashbytes to scriptPubKey
         )
 
             ;; Assert that transaction was mined...tbd last two params

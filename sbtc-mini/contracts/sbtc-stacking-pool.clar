@@ -184,7 +184,6 @@
 (define-read-only (get-current-window)
     (let 
         (
-            ;; to-do -> (get-peg-state) from .sbtc-controller, returns bool
             (peg-state (contract-call? .sbtc-registry current-peg-state))
             (current-cycle (contract-call? .pox-3 current-pox-reward-cycle))
             (current-cycle-burn-height (contract-call? .pox-3 reward-cycle-to-burn-height current-cycle))
@@ -460,7 +459,7 @@
                 ;; Update pool map by appending wallet-candidate to list of candidates
                 (map-set pool next-cycle (merge 
                     next-pool
-                    {threshold-wallet-candidates: (unwrap! (as-max-len? (append (get threshold-wallet-candidates next-pool) pox-addr) u10) err-too-many-candidates)}
+                    {threshold-wallet-candidates: (unwrap! (as-max-len? (append (get threshold-wallet-candidates next-pool) pox-addr) u100) err-too-many-candidates)}
                 ))
             )
 
