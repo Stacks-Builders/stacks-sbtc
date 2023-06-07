@@ -253,6 +253,7 @@
             (tx-output-5 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u5)))
             (tx-output-6 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u6)))
             (tx-output-7 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u7)))
+            
         )
         
             ;; Assert we're in the disbursement window

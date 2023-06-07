@@ -31,6 +31,7 @@
 (define-constant err-balance-already-transferred (err u8))
 (define-constant err-wrong-pubkey (err u9))
 (define-constant err-peg-balance-not-sufficient (err u10))
+(define-constant err-threshold-to-scriptpubkey (err u11))
 
 ;; Placeholder to make sbtc-stacking-pool happy
 (define-public (relay-handoff-fulfillment
@@ -49,6 +50,7 @@
             (current-cycle (contract-call? 'SP000000000000000000002Q6VF78.pox-2 current-pox-reward-cycle))
             (current-pool-unwrapped (unwrap! (contract-call? .sbtc-stacking-pool get-current-cycle-pool) err-current-pool-not-found))
             (current-threshold-wallet (unwrap! (get threshold-wallet current-pool-unwrapped) err-current-threshold-wallet))
+            (current-threshold-version (get version current-threshold-wallet))
             (current-threshold-hashbytes (get hashbytes current-threshold-wallet))
 
             (previous-cycle (- current-cycle u1))
@@ -71,6 +73,7 @@
             (tx-output-7 (default-to {value: u0, scriptPubKey: current-threshold-hashbytes} (element-at tx-outputs u7)))
 
             ;; versions + hashbytes to scriptPubKey
+            (current-unwrapped-threshold-pubkey (unwrap! (contract-call? .sbtc-btc-tx-helper hashbytes-to-scriptpubkey current-threshold-wallet) err-threshold-to-scriptpubkey))
         )
 
             ;; Assert that transaction was mined...tbd last two params
@@ -84,14 +87,14 @@
 
             ;; Assert that every unwrapped receiver addresss is equal to new/current-threshold-wallet
             (asserts! (and 
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-0))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-1))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-2))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-3))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-4))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-5))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-6))
-                (is-eq current-threshold-hashbytes (get scriptPubKey tx-output-7))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-0))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-1))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-2))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-3))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-4))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-5))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-6))
+                (is-eq current-unwrapped-threshold-pubkey (get scriptPubKey tx-output-7))
             ) err-wrong-pubkey)
 
             ;; Assert that amount transferred > sbtc-registry peg-balance
