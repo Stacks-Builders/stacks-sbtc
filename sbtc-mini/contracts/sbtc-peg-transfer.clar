@@ -77,7 +77,7 @@
         )
 
             ;; Assert that transaction was mined...tbd last two params
-            (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof) err-tx-not-mined)
+            (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof witness-merkle-root witness-reserved-data ctx cproof) err-tx-not-mined)
         
             ;; Assert we're in the transfer window
             (asserts! (is-eq (contract-call? .sbtc-stacking-pool get-current-window) 0x03)  err-not-in-transfer-window)

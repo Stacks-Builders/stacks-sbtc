@@ -62,6 +62,7 @@
 (define-constant err-set-peg-state (err u34))
 (define-constant err-not-protocol-caller (err u35))
 (define-constant err-threshold-percent-out-of-range (err u36))
+(define-constant err-threshold-to-scriptpubkey (err u37))
 
 
 ;;; variables ;;;
@@ -193,6 +194,13 @@
             (start-voting-window (- next-cycle-burn-height (+ normal-voting-period-len normal-transfer-period-len normal-penalty-period-len)))
             (start-transfer-window (- next-cycle-burn-height (+ normal-transfer-period-len normal-penalty-period-len)))
             (start-penalty-window (- next-cycle-burn-height normal-penalty-period-len))
+            (current-window (begin 
+                 (asserts! (< latest-disbursed-burn-height burn-block-height) disbursement)
+                 (asserts! (and (> burn-block-height latest-disbursed-burn-height) (< burn-block-height start-voting-window)) registration)
+                 (asserts! (and (>= burn-block-height start-voting-window) (< burn-block-height start-transfer-window)) voting)
+                 (asserts! (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window)) transfer)
+                 (asserts! (>= burn-block-height start-penalty-window) penalty)
+            ))
         )
 
         ;;(asserts! peg-state bad-peg-state)
@@ -254,6 +262,8 @@
             (tx-output-6 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u6)))
             (tx-output-7 (default-to {value: u0, scriptPubKey: previous-threshold-wallet} (element-at tx-outputs u7)))
             
+            ;; versions + hashbytes to scriptPubKey
+            (previous-unwrapped-threshold-pubkey (unwrap! (contract-call? .sbtc-btc-tx-helper hashbytes-to-scriptpubkey unwrapped-previous-threshold-wallet) err-threshold-to-scriptpubkey))
         )
         
             ;; Assert we're in the disbursement window
@@ -270,17 +280,18 @@
 
             ;; Assert that every unwrapped receiver addresss is equal to previous-threshold-wallet
             (asserts! (and 
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-0))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-1))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-2))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-3))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-4))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-5))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-6))
-                (is-eq previous-threshold-wallet (get scriptPubKey tx-output-7))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-0))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-1))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-2))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-3))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-4))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-5))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-6))
+                (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-7))
             ) err-wrong-pubkey)
 
             ;; Assert that every unwrapped output is less than dust
+            ;; To review
             (asserts! (and 
                 (< (get value tx-output-0) dust-limit)
                 (< (get value tx-output-1) dust-limit)
@@ -364,7 +375,7 @@
 )
 
 ;; @desc: registers a signer for the cycle, goal of this function is to gurantee the amount of STX to be stacked for the next cycle
-(define-public (signer-register (pre-registered-signer principal) (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}) (public-key (buff 33)))
+(define-public (signer-register (pre-registered-signer principal) (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}) (public-key (buff 32)))
     (let 
         (
             (signer-account (stx-account pre-registered-signer))
@@ -405,10 +416,44 @@
         ;; Assert that pre-registered signer will unlock in the next cycle
         (asserts! (is-eq next-cycle (contract-call? .pox-3 burn-height-to-reward-cycle (get unlock-height signer-account))) err-wont-unlock)
 
-        ;; to-dos
         ;; update all relevant maps
+        ;; update signer map
+        (map-set signer {stacker: tx-sender, pool: next-cycle} {
+            amount: amount-ustx,
+            ;; pox-addrs must be unique per cycle
+            pox-addr: pox-addr,
+            vote: none,
+            public-key: public-key,
+            lock-period: u0,
+            btc-earned: none
+        })
+        ;; need to set pool map
+        ;; check if first time next-cycle pool is set
+        (ok (match (map-get? pool next-cycle)
+            ;; next pool already exists, update/merge
+            next-pool
+                (map-set pool next-cycle (merge 
+                    next-pool
+                    {
+                        stackers: (unwrap! (as-max-len? (append (get stackers next-pool) tx-sender) u100) err-too-many-candidates),
+                        stacked: (+ (get stacked next-pool) amount-ustx)
+                    }
+                ))
+            ;; next pool initial set
+            (map-set pool next-cycle 
+                {
+                    stackers: (list tx-sender),
+                    stacked: amount-ustx,
+                    threshold-wallet-candidates: (list ),
+                    threshold-wallet: none,
+                    last-aggregation: none,
+                    reward-index: none,
+                    balance-transferred: false,
+                    rewards-disbursed: false
+                }
+            )
+        ))
 
-        (ok true)
     )
 )
 
