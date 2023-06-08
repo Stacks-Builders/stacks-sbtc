@@ -470,7 +470,7 @@
 	;; because they converge at some point
 	)
   (begin
-    (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth }))
+    (asserts! (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth })) (err u9999))
     (let (
       (parsed-ctx (try! (parse-tx ctx)))
       (witness-out (get-commitment-scriptPubKey (get outs parsed-ctx)))
