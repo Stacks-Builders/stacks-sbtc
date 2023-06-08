@@ -8,3 +8,4 @@ license = "GPLv3"
 
 [dependencies]
 yarpc = { path = "../yarpc" }
+clap.workspace = true

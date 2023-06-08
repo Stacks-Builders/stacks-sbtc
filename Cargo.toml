@@ -6,6 +6,7 @@ members = [
   "frost-coordinator",
   "stacks-coordinator",
   "stacks-signer",
+  "stacks-signer-api",
   "stacks-doctor",
   "test-utils",
   "test-vectors",

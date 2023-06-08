@@ -9,6 +9,7 @@
 (define-constant ERR-INVALID-COMMITMENT u8)
 (define-constant ERR-WITNESS-TX-NOT-IN-COMMITMENT u9)
 
+
 ;; Reads the next two bytes from txbuff as a little-endian 16-bit integer, and updates the index.
 ;; Returns (ok { uint16: uint, ctx: { txbuff: (buff 4096), index: uint } }) on success.
 ;; Returns (err ERR-OUT-OF-BOUNDS) if we read past the end of txbuff
@@ -458,9 +459,11 @@
 	(tree-depth uint)
 	(wproof (list 14 (buff 32))) ;; merkle proof for wtxids
   (witness-merkle-root (buff 32)) ;; merkle root of wtxids
-  (witness-reserved-data (buff 32)) ;; merkle root of wtxids TODO: should be extracted from coinbase witness input, see BIP141
+  (witness-reserved-data (buff 32)) ;; merkle root of wtxids
 	(ctx (buff 4096)) ;; non-segwit coinbase tx, contains the witness root hash
-	(cproof (list 14 (buff 32))) ;; merkle proof for coinbase tx TODO: cproof does not need a list, coinbase tx is always the first transaction
+	(cproof (list 14 (buff 32))) ;; merkle proof for coinbase tx
+	;; proof and cproof trees could somehow be condensed into a single list
+	;; because they converge at some point
 	)
   (begin
     (try! (was-tx-mined-compact burn-height ctx header { tx-index: u0, hashes: cproof, tree-depth: tree-depth }))
@@ -497,19 +500,17 @@
   (asserts! (is-eq (unwrap! (slice? scriptPubKey u0 u6) false) 0x6a24aa21a9ed) false)
 )
 
-;; (define-read-only (was-tx-mined (height uint) (tx (buff 4096)) (header { version: (buff 4), parent: (buff 32), merkle-root: (buff 32), timestamp: (buff 4), nbits: (buff 4), nonce: (buff 4) }) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
-;;     (was-tx-mined-internal height tx (contract-call? .clarity-bitcoin-helper concat-header header) (get merkle-root header) proof))
-
 ;; Verify block header and merkle proof
 ;; This function must only called with the merkle root of the provided header
 (define-private (was-tx-mined-internal (height uint) (tx (buff 4096)) (header (buff 80)) (merkle-root (buff 32)) (proof { tx-index: uint, hashes: (list 14 (buff 32)), tree-depth: uint}))
   (if (verify-block-header header height)
-      (begin
-        (if (is-eq merkle-root (get-txid tx))
-          (ok true)
-          (verify-merkle-proof (get-reversed-txid tx) (reverse-buff32 merkle-root) proof)
-        )
+    (begin
+      ;; if the transaction is the only transaction
+      (if (is-eq merkle-root (get-txid tx))
+        (ok true)
+        (verify-merkle-proof (get-reversed-txid tx) (reverse-buff32 merkle-root) proof)
       )
+    )
     (err u99999999)
   )
 )
