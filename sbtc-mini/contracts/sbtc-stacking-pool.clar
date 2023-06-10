@@ -201,20 +201,22 @@
                  (asserts! (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window)) transfer)
                  (asserts! (>= burn-block-height start-penalty-window) penalty)
             ))
+
         )
 
-        ;;(asserts! peg-state bad-peg-state)
+        (asserts! peg-state bad-peg-state)
 
-        ;;(asserts! (< latest-disbursed-burn-height burn-block-height) disbursement)
+        (asserts! (< latest-disbursed-burn-height burn-block-height) disbursement)
 
-        ;;(asserts! (and (> burn-block-height latest-disbursed-burn-height) (< burn-block-height start-voting-window)) registration)
+        (asserts! (and (> burn-block-height latest-disbursed-burn-height) (< burn-block-height start-voting-window)) registration)
 
-        ;;(asserts! (and (>= burn-block-height start-voting-window) (< burn-block-height start-transfer-window)) voting)
+        (asserts! (and (>= burn-block-height start-voting-window) (< burn-block-height start-transfer-window)) voting)
 
-        ;;(asserts! (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window)) transfer)
+        (asserts! (and (>= burn-block-height start-transfer-window) (< burn-block-height start-penalty-window)) transfer)
 
-        ;;(asserts! (>= burn-block-height start-penalty-window) penalty)
-        penalty
+        (asserts! (>= burn-block-height start-penalty-window) penalty)
+
+        0x00
 
     )
 )
