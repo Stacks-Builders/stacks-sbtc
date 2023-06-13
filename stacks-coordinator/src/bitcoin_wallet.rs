@@ -2,6 +2,7 @@ use crate::bitcoin_node::UTXO;
 use crate::coordinator::PublicKey;
 use crate::peg_wallet::{BitcoinWallet as BitcoinWalletTrait, Error as PegWalletError};
 use crate::stacks_node::PegOutRequestOp;
+use bitcoin::XOnlyPublicKey;
 use bitcoin::{
     hashes::hex::FromHex, secp256k1::Secp256k1, Address, Network, OutPoint, Script, Transaction,
     TxIn,
@@ -119,6 +120,10 @@ impl BitcoinWalletTrait for BitcoinWallet {
 
     fn address(&self) -> &Address {
         &self.address
+    }
+
+    fn x_only_pub_key(&self) -> &XOnlyPublicKey {
+        &self.public_key
     }
 }
 

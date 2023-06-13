@@ -15,10 +15,11 @@ use reqwest::{
 };
 use serde_json::{json, Value};
 use tracing::{debug, warn};
+use url::Url;
 use wsts::ecdsa::PublicKey;
 
 pub struct NodeClient {
-    node_url: String,
+    node_url: Url,
     client: Client,
     contract_name: ContractName,
     contract_address: StacksAddress,
@@ -27,7 +28,7 @@ pub struct NodeClient {
 
 impl NodeClient {
     pub fn new(
-        node_url: String,
+        node_url: Url,
         contract_name: ContractName,
         contract_address: StacksAddress,
     ) -> Self {
@@ -40,12 +41,12 @@ impl NodeClient {
         }
     }
 
-    fn build_url(&self, route: &str) -> String {
-        format!("{}{}", self.node_url, route)
+    fn build_url(&self, route: &str) -> Result<Url, StacksNodeError> {
+        Ok(self.node_url.join(route)?)
     }
 
     fn get_response(&self, route: &str) -> Result<Response, StacksNodeError> {
-        let url = self.build_url(route);
+        let url = self.build_url(route)?;
         debug!("Sending Request to Stacks Node: {}", &url);
         let now = Instant::now();
         let notify = |_err, dur| {
@@ -57,7 +58,7 @@ impl NodeClient {
                 debug!("Timeout exceeded.");
                 return Err(backoff::Error::Permanent(StacksNodeError::Timeout));
             }
-            let request = self.client.get(&url);
+            let request = self.client.get(url.as_str());
             let response = request.send().map_err(StacksNodeError::ReqwestError)?;
             Ok(response)
         };
@@ -173,7 +174,7 @@ impl NodeClient {
             "/v2/contracts/call-read/{}/{}/{function_name}",
             self.contract_address,
             self.contract_name.as_str()
-        ));
+        ))?;
         let response = self
             .client
             .post(url)
@@ -181,6 +182,7 @@ impl NodeClient {
             .body(body)
             .send()?
             .json::<serde_json::Value>()?;
+        debug!("response: {:?}", response);
         if !response
             .get("okay")
             .map(|val| val.as_bool().unwrap_or(false))
@@ -255,7 +257,7 @@ impl StacksNode for NodeClient {
     fn broadcast_transaction(&self, tx: &StacksTransaction) -> Result<(), StacksNodeError> {
         debug!("Broadcasting transaction...");
         debug!("Transaction: {:?}", tx);
-        let url = self.build_url("/v2/transactions");
+        let url = self.build_url("/v2/transactions")?;
         let mut buffer = vec![];
 
         tx.consensus_serialize(&mut buffer)?;
@@ -445,7 +447,8 @@ mod tests {
 
             mock_server_addr.set_port(mock_server.local_addr().unwrap().port());
             let client = NodeClient::new(
-                format!("http://{}", mock_server_addr),
+                Url::parse(&format!("http://{}", mock_server_addr))
+                    .expect("Failed to parse mock server address"),
                 ContractName::from("sbtc-alpha"),
                 StacksAddress::from_string("SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE").unwrap(),
             );

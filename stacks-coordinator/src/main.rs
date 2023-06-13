@@ -24,7 +24,7 @@ fn main() {
                         Command::Run => {
                             info!("Running Coordinator");
                             //TODO: set up coordination with the stacks node
-                            if let Err(e) = coordinator.run() {
+                            if let Err(e) = coordinator.run(config.polling_interval) {
                                 error!("An error occurred running the coordinator: {}", e);
                             }
                         }

@@ -43,6 +43,8 @@ pub enum Error {
     MalformedClarityValue(String, ClarityValue),
     #[error("Error occurred deserializing clarity value: {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error("URL Parse Error: {0}")]
+    UrlParseError(#[from] url::ParseError),
 }
 
 #[cfg_attr(test, mockall::automock)]

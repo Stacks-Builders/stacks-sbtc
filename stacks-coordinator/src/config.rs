@@ -5,8 +5,12 @@ use blockstack_lib::{
     types::chainstate::{StacksAddress, StacksPrivateKey, StacksPublicKey},
     vm::ContractName,
 };
+use url::Url;
 
 use crate::util::address_version;
+
+/// Default polling interval in seconds
+const DEFAULT_POLLING_INTERVAL: u64 = 5;
 
 /// Errors associated with reading the Config file
 #[derive(thiserror::Error, Debug)]
@@ -48,6 +52,8 @@ pub struct RawConfig {
     pub http_relay_url: Option<String>,
     pub frost_state_file: Option<String>,
     pub network_private_key: Option<String>,
+    /// Controls how many seconds to wait between polls
+    pub polling_interval: Option<u64>,
 }
 
 impl RawConfig {
@@ -106,8 +112,8 @@ pub struct Config {
     pub contract_address: StacksAddress,
     pub stacks_private_key: StacksPrivateKey,
     pub stacks_address: StacksAddress,
-    pub stacks_node_rpc_url: String,
-    pub bitcoin_node_rpc_url: String,
+    pub stacks_node_rpc_url: Url,
+    pub bitcoin_node_rpc_url: Url,
     pub frost_dkg_round_id: u64,
     pub signer_config_path: Option<String>,
     pub start_block_height: Option<u64>,
@@ -120,6 +126,8 @@ pub struct Config {
     pub http_relay_url: Option<String>,
     pub frost_state_file: Option<String>,
     pub network_private_key: Option<String>,
+    /// Controls how many seconds to wait between polls
+    pub polling_interval: u64,
 }
 
 impl TryFrom<RawConfig> for Config {
@@ -153,8 +161,11 @@ impl TryFrom<RawConfig> for Config {
             contract_address,
             stacks_private_key,
             stacks_address,
-            stacks_node_rpc_url: config.stacks_node_rpc_url,
-            bitcoin_node_rpc_url: config.bitcoin_node_rpc_url,
+            stacks_node_rpc_url: Url::parse(&config.stacks_node_rpc_url)
+                .map_err(|e| Error::InvalidConfig(format!("Invalid stacks_node_rpc_url: {}", e)))?,
+            bitcoin_node_rpc_url: Url::parse(&config.bitcoin_node_rpc_url).map_err(|e| {
+                Error::InvalidConfig(format!("Invalid bitcoin_node_rpc_url: {}", e))
+            })?,
             frost_dkg_round_id: config.frost_dkg_round_id,
             signer_config_path: config.signer_config_path,
             start_block_height: config.start_block_height,
@@ -165,6 +176,7 @@ impl TryFrom<RawConfig> for Config {
             http_relay_url: config.http_relay_url,
             frost_state_file: config.frost_state_file,
             network_private_key: config.network_private_key,
+            polling_interval: config.polling_interval.unwrap_or(DEFAULT_POLLING_INTERVAL),
         })
     }
 }

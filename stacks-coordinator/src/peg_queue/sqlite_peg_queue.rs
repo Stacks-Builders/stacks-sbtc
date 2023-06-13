@@ -1,6 +1,7 @@
 use rusqlite::{Connection as RusqliteConnection, Error as RusqliteError, Row as SqliteRow};
 use std::path::Path;
 use std::str::FromStr;
+use std::time::Instant;
 
 use blockstack_lib::burnchains::Txid;
 use blockstack_lib::types::chainstate::BurnchainHeaderHash;
@@ -49,7 +50,10 @@ impl SqlitePegQueue {
             conn,
             start_block_height,
         };
-        this.conn.execute(Self::sql_schema(), rusqlite::params![])?;
+        this.conn
+            .execute(Self::create_sbtc_ops_table(), rusqlite::params![])?;
+        this.conn
+            .execute(Self::create_metadata_table(), rusqlite::params![])?;
         Ok(this)
     }
 
@@ -127,18 +131,27 @@ impl SqlitePegQueue {
         )?)
     }
 
-    fn max_observed_block_height(&self) -> Result<u64, Error> {
+    fn last_processed_block_height(&self) -> Result<u64, Error> {
         Ok(self
             .conn
             .query_row(
-                Self::sql_select_max_burn_height(),
+                Self::sql_select_last_processed_block_height(),
                 rusqlite::params![],
                 |row| row.get::<_, i64>(0),
             )
-            .map(|count| count as u64)?)
+            .map(|height| height as u64)?)
     }
 
-    const fn sql_schema() -> &'static str {
+    fn insert_last_processed_block_height(&self, height: u64) -> Result<(), Error> {
+        self.conn.execute(
+            Self::sql_insert_last_processed_block_height(),
+            rusqlite::params![height as i64],
+        )?;
+
+        Ok(())
+    }
+
+    const fn create_sbtc_ops_table() -> &'static str {
         r#"
         CREATE TABLE IF NOT EXISTS sbtc_ops (
             txid TEXT NOT NULL,
@@ -148,6 +161,18 @@ impl SqlitePegQueue {
             status TEXT NOT NULL,
 
             PRIMARY KEY(txid, burn_header_hash)
+        )
+        "#
+    }
+
+    const fn create_metadata_table() -> &'static str {
+        r#"
+        CREATE TABLE IF NOT EXISTS peg_queue_metadata (
+            id TEXT NOT NULL,
+
+            last_processed_block_height INTEGER NOT NULL,
+
+            PRIMARY KEY(id)
         )
         "#
     }
@@ -170,9 +195,15 @@ impl SqlitePegQueue {
         "#
     }
 
-    const fn sql_select_max_burn_height() -> &'static str {
+    const fn sql_select_last_processed_block_height() -> &'static str {
         r#"
-        SELECT MAX(block_height) FROM sbtc_ops
+            SELECT last_processed_block_height FROM peg_queue_metadata WHERE id='peg_queue'
+        "#
+    }
+
+    const fn sql_insert_last_processed_block_height() -> &'static str {
+        r#"
+            REPLACE INTO peg_queue_metadata (id, last_processed_block_height) VALUES ('peg_queue', ?1)
         "#
     }
 }
@@ -194,17 +225,28 @@ impl PegQueue for SqlitePegQueue {
     fn poll<N: StacksNode>(&self, stacks_node: &N) -> Result<(), PegQueueError> {
         let target_block_height = stacks_node.burn_block_height()?;
         let start_block_height = self
-            .max_observed_block_height()
+            .last_processed_block_height()
             .map(|count| count + 1)
             .unwrap_or(self.start_block_height);
+
         info!(
             "Checking for peg-in and peg-out requests for block heights {} to {}",
             start_block_height, target_block_height
         );
+
+        let mut timestamp = Instant::now();
+
         for block_height in start_block_height..=target_block_height {
             self.poll_peg_in_ops(stacks_node, block_height)?;
             self.poll_peg_out_request_ops(stacks_node, block_height)?;
+            self.insert_last_processed_block_height(block_height)?;
+
+            if timestamp.elapsed().as_secs_f64() > 5.0 {
+                info!("Processed block height {}", block_height);
+                timestamp = Instant::now();
+            }
         }
+
         Ok(())
     }
 
@@ -422,6 +464,25 @@ mod tests {
         assert_eq!(entry.status, Status::Acknowledged);
     }
 
+    #[test]
+    fn should_start_at_last_observed_block_height_when_polling() {
+        let start_block_height: u64 = 10;
+        let initial_node_block_height: u64 = 20;
+        let second_poll_node_block_height: u64 = 40;
+
+        let peg_queue = SqlitePegQueue::in_memory(start_block_height).unwrap();
+
+        let stacks_node_mock = default_stacks_node_mock(initial_node_block_height);
+        peg_queue.poll(&stacks_node_mock).unwrap();
+
+        assert_eq!(peg_queue.last_processed_block_height().unwrap(), 20);
+
+        let stacks_node_mock = stacks_node_mock_with_no_sbtc_ops(second_poll_node_block_height);
+        peg_queue.poll(&stacks_node_mock).unwrap();
+
+        assert_eq!(peg_queue.last_processed_block_height().unwrap(), 40);
+    }
+
     fn default_stacks_node_mock(block_height: u64) -> stacks_node::MockStacksNode {
         let mut stacks_node_mock = stacks_node::MockStacksNode::new();
 
@@ -436,6 +497,24 @@ mod tests {
         stacks_node_mock
             .expect_get_peg_out_request_ops()
             .returning(|height| Ok(vec![peg_out_request_op(height)]));
+
+        stacks_node_mock
+    }
+
+    fn stacks_node_mock_with_no_sbtc_ops(block_height: u64) -> stacks_node::MockStacksNode {
+        let mut stacks_node_mock = stacks_node::MockStacksNode::new();
+
+        stacks_node_mock
+            .expect_burn_block_height()
+            .returning(move || Ok(block_height));
+
+        stacks_node_mock
+            .expect_get_peg_in_ops()
+            .returning(|_height| Ok(vec![]));
+
+        stacks_node_mock
+            .expect_get_peg_out_request_ops()
+            .returning(|_height| Ok(vec![]));
 
         stacks_node_mock
     }
