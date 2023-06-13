@@ -8,24 +8,23 @@ use tracing::{error, info, warn};
 fn main() {
     let cli = Cli::parse();
 
-    // Initialize logging
-    logging::initiate_tracing_subscriber().unwrap();
+    logging::initiate_tracing_subscriber();
 
     //TODO: get configs from sBTC contract
     match Config::from_path(&cli.config) {
         Ok(mut config) => {
-            config.signer_config_path = cli.signer_config;
+            config.signer_config_path = Some(cli.signer_config);
             if cli.start_block_height.is_some() {
                 config.start_block_height = cli.start_block_height;
             }
-            match StacksCoordinator::try_from(config) {
+            match StacksCoordinator::try_from(&config) {
                 Ok(mut coordinator) => {
                     // Determine what action the caller wishes to perform
                     match cli.command {
                         Command::Run => {
                             info!("Running Coordinator");
                             //TODO: set up coordination with the stacks node
-                            if let Err(e) = coordinator.run() {
+                            if let Err(e) = coordinator.run(config.polling_interval) {
                                 error!("An error occurred running the coordinator: {}", e);
                             }
                         }

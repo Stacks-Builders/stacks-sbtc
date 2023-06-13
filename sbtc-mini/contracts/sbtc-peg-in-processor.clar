@@ -134,8 +134,7 @@
 	)
 	(let (
 		;; check if the tx was mined
-		;;(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
-		(burn-wtxid (sha256 tx))
+		(burn-wtxid (try! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof)))
 		;; extract data from the tx
 		(peg-in-data (try! (extract-data tx p2tr-unlock-script)))
 		)

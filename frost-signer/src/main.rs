@@ -6,7 +6,7 @@ use frost_signer::logging;
 use frost_signer::signer::Signer;
 
 fn main() {
-    logging::initiate_tracing_subscriber().unwrap();
+    logging::initiate_tracing_subscriber();
 
     let cli = Cli::parse();
 

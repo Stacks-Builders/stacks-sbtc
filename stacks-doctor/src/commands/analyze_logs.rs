@@ -21,7 +21,7 @@ pub fn analyze_logs(log_file: PathBuf) -> Result<()> {
     let file = BufReader::new(File::open(log_file).context("Could not open log file")?);
     let mut is_okay = true;
 
-    file.lines().filter_map(Result::ok).for_each(|line| {
+    file.lines().map_while(Result::ok).for_each(|line| {
         if line.contains("mined anchored block") {
             is_okay = true;
         } else if line.contains("Failure mining") {

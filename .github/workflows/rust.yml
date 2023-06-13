@@ -59,6 +59,8 @@ jobs:
         name: Cargo.lock
     - name: Cache JS script dependencies
       run: deno cache ./yarpc/js/stacks/transactions.ts
+    - name: Build code
+      run: cargo build --verbose --locked ${{matrix.type}}
     - name: Run tests
       run: cargo test --verbose --locked ${{matrix.type}}
 

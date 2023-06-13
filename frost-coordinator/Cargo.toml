@@ -10,15 +10,21 @@ edition = "2021"
 
 [dependencies]
 p256k1 = { workspace = true }
-wtfrost = { workspace = true }
+wsts = { workspace = true }
 backoff = { workspace = true }
 clap = { workspace = true }
 hashbrown = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-frost-signer = { version = "0.0.1", path = "../frost-signer" }
+frost-signer = { path = "../frost-signer" }
 serde = { version = "1.0", features = ["serde_derive"] }
+
+[dev-dependencies]
+rand_core = { workspace = true }
+rand = { workspace = true }
+relay-server = { path = "../relay-server" }
+test-utils = { path = "../test-utils" }
 
 [lib]
 path = "src/lib.rs"    # The source file of the target

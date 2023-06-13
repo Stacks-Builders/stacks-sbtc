@@ -6,10 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hashbrown = { workspace = true }
+hex = "0.4.3"
 ureq = { workspace = true }
 bitcoin = { version = "0.29.2", features = ["rand"] }
 ctrlc = "3.2.5"
 nix = "0.26.2"
 libc = "0.2.139"
-url = "2.3.1"
+url = { workspace = true }
 rand.workspace = true
+wsts = { workspace = true }

@@ -1,5 +1,5 @@
 ---
-name: Risk issue template
+name: Risk issue
 about: Track Risk issues
 title: "[Risk]"
 labels: 'risk:high-impact,risk:medium-impact,risk:low-impact,risk:informational,risk:unknown-impact,risk:high-likelihood,risk:medium-likelihood,risk:low-likelihood,,risk:unknown-likelihood,unsolved,mitigated,wontfix,fixed,not-an-issue'

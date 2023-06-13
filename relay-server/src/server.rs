@@ -1,4 +1,7 @@
-use std::io::{Cursor, Error, Write};
+use std::{
+    io::{Cursor, Error, Write},
+    net::TcpListener,
+};
 
 use yarpc::{
     http::{Call, IoStream, MemIoStreamEx, Message, Method, QueryEx, Request, Response},
@@ -39,6 +42,19 @@ use crate::{mem_state::MemState, state::State};
 pub struct Server(MemState);
 
 impl Server {
+    pub fn run(addr: &str) {
+        let listener = TcpListener::bind(addr).unwrap();
+        println!("Listening {addr}...");
+
+        let mut server = Server::default();
+        for stream_or_error in &mut listener.incoming() {
+            let f = || server.update(&mut stream_or_error?);
+            if let Err(e) = f() {
+                eprintln!("IO error: {e}");
+            }
+        }
+    }
+
     pub fn update(&mut self, io: &mut impl IoStream) -> Result<(), Error> {
         let request = Request::read(io.istream())?;
         let ostream = io.ostream();

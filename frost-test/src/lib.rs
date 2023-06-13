@@ -1,4 +1,3 @@
-pub mod bitcoind;
 mod sync_test;
 mod v1;
 
@@ -8,7 +7,7 @@ mod v1;
 mod tests {
     use hashbrown::HashMap;
     use rand_core::{CryptoRng, OsRng, RngCore};
-    use wtfrost::{
+    use wsts::{
         common::PolyCommitment,
         errors::DkgError,
         v1::{Party, SignatureAggregator},
@@ -32,7 +31,7 @@ mod tests {
         for i in 0..parties.len() {
             let mut h = HashMap::new();
             for j in 0..parties.len() {
-                h.insert(j, broadcast_shares[j][&i]);
+                h.insert(j as u32, broadcast_shares[j][&(i as u32)]);
             }
             //let compute_secret_start = time::Instant::now();
             parties[i].compute_secret(h, &A)?;
@@ -47,16 +46,16 @@ mod tests {
     }
 
     #[allow(non_snake_case)]
-    fn select_parties<RNG: RngCore + CryptoRng>(N: usize, T: usize, rng: &mut RNG) -> Vec<usize> {
-        let mut indices: Vec<usize> = Vec::new();
+    fn select_parties<RNG: RngCore + CryptoRng>(N: u32, T: u32, rng: &mut RNG) -> Vec<u32> {
+        let mut indices: Vec<u32> = Vec::new();
 
         for i in 0..N {
             indices.push(i);
         }
 
-        while indices.len() > T {
-            let i = rng.next_u64() as usize % indices.len();
-            indices.swap_remove(i);
+        while indices.len() > usize::try_from(T).unwrap() {
+            let i = rng.next_u64() as u32 % u32::try_from(indices.len()).unwrap();
+            indices.swap_remove(i as usize);
         }
 
         indices
@@ -66,7 +65,7 @@ mod tests {
     // There might be a slick one-liner for this?
     fn collect_signatures(
         parties: &Vec<Party>,
-        signers: &Vec<usize>,
+        signers: &Vec<u32>,
         nonces: &[PublicNonce],
         msg: &String,
     ) -> Vec<SignatureShare> {
@@ -87,7 +86,7 @@ mod tests {
     #[allow(non_snake_case)]
     fn pure_frost() {
         // let num_nonces = 5;
-        let N: usize = 10;
+        let N: u32 = 10;
         let T = (N * 2) / 3;
 
         let mut rng = OsRng::default();
@@ -135,7 +134,7 @@ mod tests {
                 );
             }
 
-            if sig_agg.get_nonce_ctr() == num_nonces as usize {
+            if sig_agg.get_nonce_ctr() == num_nonces as u32 {
                 println!("Everyone's nonces were refilled.");
                 let B: Vec<Vec<PublicNonce>> = parties
                     .iter_mut()
