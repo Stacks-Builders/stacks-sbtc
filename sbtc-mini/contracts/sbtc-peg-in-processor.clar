@@ -8,10 +8,6 @@
 (define-constant type-standard-principal 0x05)
 (define-constant type-contract-principal 0x06)
 
-(define-read-only (is-protocol-caller (who principal))
-	(contract-call? .sbtc-controller is-protocol-caller contract-caller)
-)
-
 ;; --- Public functions
 
 (define-read-only (extract-principal (sequence (buff 128)) (start uint))
