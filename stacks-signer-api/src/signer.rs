@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::{Encode, Sqlite};
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
@@ -9,7 +10,7 @@ pub enum Error {
     InvalidStatusError(String),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, sqlx::Type)]
 #[serde(rename_all = "lowercase")]
 /// The current status of a signer.
 pub enum Status {

@@ -1,3 +1,6 @@
+use std::env;
+
+use dotenv::dotenv;
 use stacks_signer_api::{
     db,
     routes::{
@@ -21,8 +24,10 @@ async fn main() {
     // First enable tracing
     initiate_tracing_subscriber();
 
-    // Initialize the connection pool
-    let pool = db::init_pool(None)
+    let _ = dotenv::dotenv();
+
+    // Initialize the connection pool__
+    let pool = db::init_pool(env::var("DATABASE_URL").ok())
         .await
         .expect("Failed to initialize pool.");
 
@@ -31,6 +36,7 @@ async fn main() {
     let add_key_route = add_key_route(pool.clone());
     let delete_key_route = delete_key_route(pool.clone());
     let get_key_route = get_keys_route(pool.clone());
+
     // Signer routes
     let add_signer_route = add_signer_route(pool.clone());
     let delete_signer_route = delete_signer_route(pool.clone());

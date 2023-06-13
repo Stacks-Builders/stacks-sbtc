@@ -8,16 +8,6 @@ use crate::{
 use sqlx::{Row, SqlitePool};
 use warp::http;
 
-// SQL queries used for performing various operations on the "keys" table.
-const SQL_INSERT_KEY: &str =
-    "INSERT OR REPLACE INTO keys (signer_id, user_id, key) VALUES (?1, ?2, ?3)";
-const SQL_DELETE_KEY: &str = "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3";
-const SQL_DELETE_KEYS_BY_ID: &str = "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2";
-const SQL_SELECT_KEYS: &str =
-    "SELECT key FROM keys WHERE signer_id = ?1 AND user_id = ?2 ORDER BY key ASC";
-const SQL_COUNT_KEYS_BY_ID: &str =
-    "SELECT COUNT(*) FROM keys WHERE signer_id = ?1 AND user_id = ?2";
-
 /// Add a given delegator key to the database.
 ///
 /// # Params
@@ -29,13 +19,15 @@ const SQL_COUNT_KEYS_BY_ID: &str =
 /// indicating if the operation was successful or not.
 pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, warp::Rejection> {
     // First make sure we have an existing signer id
-    let count: i64 = sqlx::query(SQL_COUNT_KEYS_BY_ID)
-        .bind(key.signer_id)
-        .bind(key.user_id)
-        .fetch_one(&pool)
-        .await
-        .map_err(Error::from)?
-        .get(0);
+    let count = sqlx::query!(
+        "SELECT * FROM keys WHERE signer_id = ?1 AND user_id = ?2",
+        key.signer_id,
+        key.user_id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(Error::from)?
+    .len();
 
     if count == 0 {
         let signer = Signer {
@@ -47,13 +39,15 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
     }
 
     // Insert the key into the database
-    sqlx::query(SQL_INSERT_KEY)
-        .bind(key.signer_id)
-        .bind(key.user_id)
-        .bind(key.key.as_str())
-        .execute(&pool)
-        .await
-        .map_err(Error::from)?;
+    sqlx::query!(
+        "INSERT OR REPLACE INTO keys (signer_id, user_id, key) VALUES (?1, ?2, ?3)",
+        key.signer_id,
+        key.user_id,
+        key.key
+    )
+    .execute(&pool)
+    .await
+    .map_err(Error::from)?;
 
     Ok(warp::reply::with_status(
         warp::reply::json(&serde_json::json!({ "status": "added" })),
@@ -76,13 +70,15 @@ pub async fn delete_keys_by_id(
     user_id: i64,
     pool: &SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let rows_deleted = sqlx::query(SQL_DELETE_KEYS_BY_ID)
-        .bind(signer_id)
-        .bind(user_id)
-        .execute(pool)
-        .await
-        .map_err(Error::from)?
-        .rows_affected();
+    let rows_deleted = sqlx::query!(
+        "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2",
+        signer_id,
+        user_id
+    )
+    .execute(pool)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
     if rows_deleted == 0 {
         Ok(warp::reply::with_status(
             warp::reply::json(&serde_json::json!({ "error": "not found" })),
@@ -106,14 +102,17 @@ pub async fn delete_keys_by_id(
 /// * Result<impl warp::Reply, warp::Rejection> - The JSON response as a result,
 ///   indicating if the operation was successful or not.
 pub async fn delete_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, warp::Rejection> {
-    let rows_deleted = sqlx::query(SQL_DELETE_KEY)
-        .bind(key.signer_id)
-        .bind(key.user_id)
-        .bind(key.key.as_str())
-        .execute(&pool)
-        .await
-        .map_err(Error::from)?
-        .rows_affected();
+    let rows_deleted = sqlx::query!(
+        "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3",
+        key.signer_id,
+        key.user_id,
+        key.key
+    )
+    .execute(&pool)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
+
     if rows_deleted == 0 {
         Ok(warp::reply::with_status(
             warp::reply::json(&serde_json::json!({ "error": "not found" })),
@@ -141,15 +140,17 @@ pub async fn get_keys(
     query: KeysQuery,
     pool: SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let keys: Vec<String> = sqlx::query(SQL_SELECT_KEYS)
-        .bind(query.signer_id)
-        .bind(query.user_id)
-        .fetch_all(&pool)
-        .await
-        .map_err(Error::from)?
-        .iter()
-        .map(|row: &sqlx::sqlite::SqliteRow| row.get(0))
-        .collect();
+    let keys: Vec<String> = sqlx::query!(
+        "SELECT key FROM keys WHERE signer_id = ?1 AND user_id = ?2 ORDER BY key ASC",
+        query.signer_id,
+        query.user_id
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(Error::from)?
+    .iter()
+    .map(|row| row.key.clone())
+    .collect();
 
     let displayed_keys = paginate_items(&keys, query.page, query.limit);
     let json_response = warp::reply::with_status(
@@ -187,10 +188,10 @@ mod tests {
             .expect("failed to add key");
         assert_eq!(response.into_response().status(), StatusCode::CREATED);
 
-        let row = sqlx::query(
-                "SELECT signer_id, user_id, key FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3").bind(key.signer_id).bind(key.user_id).bind(key.key.as_str()).fetch_one(&pool).await.expect("Failed to get added key");
+        let row = sqlx::query!(
+                "SELECT signer_id, user_id, key FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3", key.signer_id, key.user_id, key.key).fetch_one(&pool).await.expect("Failed to get added key");
         assert_eq!(
-            (row.get(0), row.get(1), row.get(2)),
+            (row.signer_id, row.user_id, row.key),
             (key.signer_id, key.user_id, key.key)
         );
     }
@@ -214,16 +215,16 @@ mod tests {
             .expect("failed to delete key");
         assert_eq!(response.into_response().status(), StatusCode::OK);
 
-        let row_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3",
+        let row_count = sqlx::query!(
+            "SELECT * FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3",
+            key.signer_id,
+            key.user_id,
+            key.key
         )
-        .bind(key.signer_id)
-        .bind(key.user_id)
-        .bind(key.key)
-        .fetch_one(&pool)
+        .fetch_all(&pool)
         .await
         .expect("Failed to get number of keys")
-        .get(0);
+        .len();
         assert_eq!(row_count, 0);
     }
 

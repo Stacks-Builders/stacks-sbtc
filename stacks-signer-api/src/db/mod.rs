@@ -27,7 +27,8 @@ const SQL_SCHEMA_SIGNERS: &str = r#"
         status TEXT NOT NULL,
 
         PRIMARY KEY(signer_id, user_id)
-    );"#;
+    );
+    "#;
 
 // SQL schema for creating the `keys` table
 const SQL_SCHEMA_KEYS: &str = r#"
@@ -48,9 +49,9 @@ const SQL_SCHEMA_KEYS: &str = r#"
 ///
 /// # Returns
 /// * Result<SqlitePool, Error>: Result containing the initialized SqlitePool, or an Error if initialization failed.
-pub async fn init_pool(path: Option<&str>) -> Result<SqlitePool, Error> {
+pub async fn init_pool(path: Option<String>) -> Result<SqlitePool, Error> {
     let pool = match path {
-        Some(path) => SqlitePool::connect(path).await?,
+        Some(path) => SqlitePool::connect(&path).await?,
         None => SqlitePool::connect("sqlite::memory:").await?,
     };
     sqlx::query(SQL_SCHEMA_SIGNERS).execute(&pool).await?;

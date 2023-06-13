@@ -6,14 +6,6 @@ use crate::{
 
 use sqlx::{Row, SqlitePool};
 use warp::http;
-// SQL constants for interacting with the SQLite database.
-const SQL_INSERT_SIGNER: &str =
-    "INSERT OR REPLACE INTO sbtc_signers (signer_id, user_id, status) VALUES (?1, ?2, ?3)";
-const SQL_DELETE_SIGNER: &str = "DELETE FROM sbtc_signers WHERE signer_id = ?1 AND user_id = ?2";
-const SQL_SELECT_SIGNER: &str =
-    "SELECT signer_id, user_id, status FROM sbtc_signers ORDER BY signer_id ASC";
-const SQL_SELECT_SIGNER_BY_STATUS: &str =
-    "SELECT signer_id, user_id, status FROM sbtc_signers WHERE status = ?1 ORDER BY signer_id ASC";
 
 /// Add a given signer to the database.
 ///
@@ -27,13 +19,15 @@ pub async fn add_signer(
     signer: Signer,
     pool: SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    sqlx::query(SQL_INSERT_SIGNER)
-        .bind(signer.signer_id)
-        .bind(signer.user_id)
-        .bind(signer.status.as_str())
-        .execute(&pool)
-        .await
-        .map_err(Error::from)?;
+    sqlx::query!(
+        "INSERT OR REPLACE INTO sbtc_signers (signer_id, user_id, status) VALUES (?1, ?2, ?3)",
+        signer.signer_id,
+        signer.user_id,
+        signer.status
+    )
+    .execute(&pool)
+    .await
+    .map_err(Error::from)?;
 
     Ok(warp::reply::with_status(
         warp::reply::json(&serde_json::json!({ "status": "added" })),
@@ -56,13 +50,15 @@ pub async fn delete_signer(
     // First delete any corresponding keys
     delete_keys_by_id(signer.signer_id, signer.user_id, &pool).await?;
 
-    let rows_deleted = sqlx::query(SQL_DELETE_SIGNER)
-        .bind(signer.signer_id)
-        .bind(signer.user_id)
-        .execute(&pool)
-        .await
-        .map_err(Error::from)?
-        .rows_affected();
+    let rows_deleted = sqlx::query!(
+        "DELETE FROM sbtc_signers WHERE signer_id = ?1 AND user_id = ?2",
+        signer.signer_id,
+        signer.user_id
+    )
+    .execute(&pool)
+    .await
+    .map_err(Error::from)?
+    .rows_affected();
     // Delete the signer itself
     if rows_deleted == 0 {
         Ok(warp::reply::with_status(
@@ -89,18 +85,22 @@ pub async fn get_signers(
     query: SignerQuery,
     pool: SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let sqlite_query = if let Some(status) = query.status.map(|s| s.as_str()) {
-        sqlx::query(SQL_SELECT_SIGNER_BY_STATUS).bind(status)
-    } else {
-        sqlx::query(SQL_SELECT_SIGNER)
-    };
-    let signers: Vec<(i64, i64, String)> = sqlite_query
-        .fetch_all(&pool)
-        .await
+    let signers: Vec<(i64, i64, String)> = if let Some(status) = query.status.map(|s| s.as_str()) {
+        sqlx::query!(
+    "SELECT signer_id, user_id, status FROM sbtc_signers WHERE status = ?1 ORDER BY signer_id ASC", status).fetch_all(&pool).await
         .map_err(Error::from)?
         .iter()
-        .map(|row: &sqlx::sqlite::SqliteRow| (row.get(0), row.get(1), row.get(2)))
-        .collect();
+        .map(|row| (row.signer_id, row.user_id, row.status.clone()))
+        .collect()
+    } else {
+        sqlx::query!("SELECT signer_id, user_id, status FROM sbtc_signers ORDER BY signer_id ASC")
+            .fetch_all(&pool)
+            .await
+            .map_err(Error::from)?
+            .iter()
+            .map(|row| (row.signer_id, row.user_id, row.status.clone()))
+            .collect()
+    };
     let displayed_signers = paginate_items(&signers, query.page, query.limit);
 
     Ok(warp::reply::with_status(
@@ -137,14 +137,14 @@ mod tests {
             .expect("failed to add signer");
         assert_eq!(response.into_response().status(), StatusCode::CREATED);
 
-        let row = sqlx::query(SQL_SELECT_SIGNER)
-            .bind(signer.signer_id)
-            .bind(signer.user_id)
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to get added signer");
+        let row = sqlx::query!(
+            "SELECT signer_id, user_id, status FROM sbtc_signers ORDER BY signer_id ASC"
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to get added signer");
         assert_eq!(
-            (row.get(0), row.get(1), row.get(2)),
+            (row.signer_id, row.user_id, row.status.as_str().to_string()),
             (
                 signer.signer_id,
                 signer.user_id,
@@ -172,14 +172,15 @@ mod tests {
             .expect("failed to delete signer");
         assert_eq!(response.into_response().status(), StatusCode::OK);
 
-        let row_count: i64 =
-            sqlx::query("SELECT COUNT(*) FROM sbtc_signers WHERE signer_id = ?1 AND user_id = ?2")
-                .bind(signer.signer_id)
-                .bind(signer.user_id)
-                .fetch_one(&pool)
-                .await
-                .expect("Failed to get row count")
-                .get(0);
+        let row_count = sqlx::query!(
+            "SELECT * FROM sbtc_signers WHERE signer_id = ?1 AND user_id = ?2",
+            signer.signer_id,
+            signer.user_id
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("Failed to get row count")
+        .len();
         assert_eq!(row_count, 0);
     }
 
