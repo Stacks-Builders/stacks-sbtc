@@ -183,7 +183,7 @@
             (peg-state (contract-call? .sbtc-registry current-peg-state))
             (current-cycle (contract-call? .pox-3 current-pox-reward-cycle))
             (current-cycle-burn-height (contract-call? .pox-3 reward-cycle-to-burn-height current-cycle))
-            (next-cycle (contract-call? .pox-3 current-pox-reward-cycle))
+            (next-cycle (+ u1 (contract-call? .pox-3 current-pox-reward-cycle)))
             (next-cycle-burn-height (contract-call? .pox-3 reward-cycle-to-burn-height next-cycle))
             (latest-disbursed-burn-height (var-get last-disbursed-burn-height))
             (start-voting-window (- next-cycle-burn-height (+ normal-voting-period-len normal-transfer-period-len normal-penalty-period-len)))
