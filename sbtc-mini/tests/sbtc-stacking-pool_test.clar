@@ -9,16 +9,24 @@
 (define-constant bad-peg-state 0x05)
 
 ;; @name Querying volunteer can pre-register in cycle (n - 1) to register in cycle n
-;; @mine-blocks-before 5
-;; (define-public (test-pre-register)
-;; 	(begin
-;; 		(unwrap!
-;; 			(contract-call? .sbtc-stacking-pool signer-pre-register u1000000000 mock-pox-reward-wallet-1)
-;; 			(err "Should have succeeded")
-;; 			)
-;; 		(ok true)
-;; 	)
-;; )
+;; @mine-blocks-before 70000
+(define-public (test-pre-register)
+	(begin
+		(unwrap!
+			(contract-call? .sbtc-stacking-pool signer-pre-register u1000000000 mock-pox-reward-wallet-1)
+			(err "Should have succeeded")
+			)
+		(ok true)
+	)
+)
+
+;; @name Is protocol caller test (is not at first)
+(define-public (test-is-protocol-caller)
+	(if (is-ok (contract-call? .sbtc-stacking-pool is-protocol-caller))
+		(err false)
+		(ok true)
+	)
+)
 
 ;; @name Get current cycle stacker/signer pool, should return none
 (define-public (test-get-current-cycle-pool-none)

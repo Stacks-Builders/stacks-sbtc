@@ -145,7 +145,7 @@
 ;;;;; Read-Only Functions ;;;;;
 
 ;; Check if caller is a protocol caller
-(define-read-only (is-protocol-caller (who principal))
+(define-read-only (is-protocol-caller)
 	(contract-call? .sbtc-controller is-protocol-caller contract-caller)
 )
 
@@ -724,7 +724,7 @@
     (begin
 
         ;; Assert that caller is protocol caller
-        (unwrap! (is-protocol-caller contract-caller) err-not-protocol-caller)
+        (unwrap! (is-protocol-caller) err-not-protocol-caller)
 
         ;; Assert that new-threshold-percent is greater u500 or less than u950
         (asserts! (and (>= new-threshold-percent u500) (<= new-threshold-percent u950)) err-threshold-percent-out-of-range)
