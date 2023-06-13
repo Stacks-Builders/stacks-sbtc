@@ -20,6 +20,14 @@
 ;; Or is this done over many validations?
 ;; How do we keep track of the pegged-BTC balance?
 
+;; cycle windows
+(define-constant disbursement 0x00)
+(define-constant registration 0x01)
+(define-constant voting 0x02)
+(define-constant transfer 0x03)
+(define-constant penalty 0x04)
+(define-constant bad-peg-state 0x05)
+
 (define-constant err-current-pool-not-found (err u0))
 (define-constant err-current-threshold-wallet (err u1))
 (define-constant err-previous-pool-not-found (err u2))
@@ -80,7 +88,7 @@
             (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof witness-merkle-root witness-reserved-data ctx cproof) err-tx-not-mined)
         
             ;; Assert we're in the transfer window
-            (asserts! (is-eq (contract-call? .sbtc-stacking-pool get-current-window) 0x03)  err-not-in-transfer-window)
+            (asserts! (is-eq (contract-call? .sbtc-stacking-pool get-current-window) transfer)  err-not-in-transfer-window)
 
             ;; Assert that balance of previous-threshold-wallet wasn't already transferred
             (asserts! previous-pool-balance-transferred err-balance-already-transferred)

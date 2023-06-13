@@ -166,19 +166,14 @@
 
 ;; Get signer in cycle
 (define-read-only (get-signer-in-cycle (signer-principal principal) (cycle uint))
-    (let 
-        (
-            (current-signer (default-to {
-                amount: u0,
-                pox-addr: { version: 0x00, hashbytes: 0x00 },
-                vote: none,
-                public-key: 0x00,
-                lock-period: u0,
-                btc-earned: none
-            } (map-get? signer {stacker: signer-principal, pool: cycle})))
-        )
-        (ok (get public-key current-signer))
-    )
+    (default-to {
+        amount: u0,
+        pox-addr: { version: 0x00, hashbytes: 0x00 },
+        vote: none,
+        public-key: 0x00,
+        lock-period: u0,
+        btc-earned: none
+    } (map-get? signer {stacker: signer-principal, pool: cycle}))
 )
 
 ;; Get current window
@@ -278,7 +273,7 @@
             (asserts! (not previous-pool-disbursed) err-already-disbursed)
 
             ;; Assert that transaction was mined...tbd last two params
-            (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof 0x 0x ctx cproof) err-tx-not-mined)
+            (unwrap! (contract-call? .clarity-bitcoin was-segwit-tx-mined-compact burn-height tx header tx-index tree-depth wproof witness-merkle-root witness-reserved-data ctx cproof) err-tx-not-mined)
 
             ;; Assert that every unwrapped receiver addresss is equal to previous-threshold-wallet
             (asserts! (and 
@@ -291,19 +286,6 @@
                 (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-6))
                 (is-eq previous-unwrapped-threshold-pubkey (get scriptPubKey tx-output-7))
             ) err-wrong-pubkey)
-
-            ;; Assert that every unwrapped output is less than dust
-            ;; To review
-            (asserts! (and 
-                (< (get value tx-output-0) dust-limit)
-                (< (get value tx-output-1) dust-limit)
-                (< (get value tx-output-2) dust-limit)
-                (< (get value tx-output-3) dust-limit)
-                (< (get value tx-output-4) dust-limit)
-                (< (get value tx-output-5) dust-limit)
-                (< (get value tx-output-6) dust-limit)
-                (< (get value tx-output-7) dust-limit)
-            ) err-dust-remains)
 
             ;; All POX rewards have been distributed, update relevant vars/maps
             (var-set last-disbursed-burn-height block-height)
@@ -319,10 +301,11 @@
 ;;;;; Registration Functions ;;;;;
 
 ;; @desc: pre-registers a stacker for the cycle, goal of this function is to gurantee the amount of STX to be stacked for the next cycle
-(define-public (signer-pre-register (new-signer principal) (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}))
+(define-public (signer-pre-register (amount-ustx uint) (pox-addr { version: (buff 1), hashbytes: (buff 32)}))
     (let 
         (
             (signer-account (stx-account tx-sender))
+            (new-signer tx-sender)
             (signer-unlocked-balance (get unlocked signer-account))
             (signer-allowance-status (unwrap! (contract-call? .pox-3 get-allowance-contract-callers tx-sender (as-contract tx-sender)) err-allowance-not-set))
             (signer-allowance-end-height (get until-burn-ht signer-allowance-status))
