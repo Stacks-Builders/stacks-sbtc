@@ -7,6 +7,37 @@ This is an API for managing signers and their associated keys in a SQLite databa
 - Rust
 - SQLite
 
+## Dev/Compilation setup
+
+To make use of `sqlx` and verify the sql queries on your own, you should follow the following steps:
+
+1. remove `sqlx-data.json`
+2. install `sqlx-cli`
+3. make sure you have sqlite installed
+4. create a `.env` file in the `stacks-signer-api` root folder with the env variable `DATABASE_URL`
+5. The url for sqlite is in the format `DATABASE_URL=sqlite:////$(pwd)/stacks-signer-api/dev-signer-api.sqlite`
+6. generate the test db using `sqlx database create`
+7. you need to manually add the tables that the queries are accessing for compile time checking, i.e. the `sbtc_signer` and `keys` table
+
+```Sql
+CREATE TABLE IF NOT EXISTS sbtc_signers (
+        signer_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+
+        PRIMARY KEY(signer_id, user_id)
+    );
+
+CREATE TABLE IF NOT EXISTS keys (
+            key TEXT NOT NULL,
+            signer_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+    
+            PRIMARY KEY(key, signer_id, user_id),
+            FOREIGN KEY(signer_id, user_id) REFERENCES sbtc_signers(signer_id, user_id)
+        );
+```
+
 ## API Overview
 
 The API is built using the Rust programming language and is designed to interact with a SQLite database. The provided endpoints allow you to manage signers, their status, and the associated keys.
