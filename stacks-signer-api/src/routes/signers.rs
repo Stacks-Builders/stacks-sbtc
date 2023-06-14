@@ -135,7 +135,7 @@ mod tests {
         let body = api.body();
 
         let signers: Vec<Signer> =
-            serde_json::from_slice(&body).expect("failed to deserialize Signers");
+            serde_json::from_slice(body).expect("failed to deserialize Signers");
         assert_eq!(signers.len(), 1);
         assert_eq!(
             signers[0],
