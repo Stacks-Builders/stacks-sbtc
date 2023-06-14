@@ -18,7 +18,7 @@ To make use of `sqlx` and verify the sql queries on your own, you should follow 
 5. The url for sqlite is in the format `DATABASE_URL=sqlite://$(pwd)/stacks-signer-api/dev-signer-api.sqlite`
 6. generate the test db using `sqlx database create`
 7. run the `init` migration `sqlx migrate run`
-8. prepare the `offline` static check cache `cargo sqlx prepare`
+8. prepare the `offline` static check cache `cargo sqlx prepare -- --lib`
 
 ## API Overview
 

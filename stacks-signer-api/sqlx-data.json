@@ -1,3 +1,161 @@
 {
-  "db": "SQLite"
+  "db": "SQLite",
+  "2a8394ba815b4b7e180bda5512c7183ff9257945d6545ea51c6a079b9d975f99": {
+    "describe": {
+      "columns": [
+        {
+          "name": "key",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "signer_id",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 2,
+          "type_info": "Int64"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "SELECT * FROM keys WHERE signer_id = ?1 AND user_id = ?2"
+  },
+  "2c2a3c38c0388e716f288be9482c4179894106357098c9519365f300336ea9fc": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2"
+  },
+  "404c8fa11dc7fe5dda72eeda34823f12d36c9a1c9fc7877aa6acbbb80b27d0f7": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "DELETE FROM sbtc_signers WHERE signer_id = ?1 AND user_id = ?2"
+  },
+  "44ef0bc9ed75331c37cdd05b7560897c0f6def32edf5d1b5112dcd3c35a4ed9e": {
+    "describe": {
+      "columns": [
+        {
+          "name": "signer_id",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "status",
+          "ordinal": 2,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "SELECT signer_id, user_id, status FROM sbtc_signers ORDER BY signer_id ASC"
+  },
+  "5bd63f02d78f08c57d13649d300f30273275785a98b8f283fc96f410b335b1b9": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 3
+      }
+    },
+    "query": "INSERT OR REPLACE INTO keys (signer_id, user_id, key) VALUES (?1, ?2, ?3)"
+  },
+  "9e9891c86e8e8b8bf27bea36928cd5e5ad9cd456dc5c420e5a1777b93b006399": {
+    "describe": {
+      "columns": [
+        {
+          "name": "signer_id",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "status",
+          "ordinal": 2,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "SELECT signer_id, user_id, status FROM sbtc_signers WHERE status = ?1 ORDER BY signer_id ASC"
+  },
+  "d402cb8f21e5a828bfbc6aa8fda6aa45b5131fe47f69b0429ee426d342dd62ba": {
+    "describe": {
+      "columns": [
+        {
+          "name": "key",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "SELECT key FROM keys WHERE signer_id = ?1 AND user_id = ?2 ORDER BY key ASC"
+  },
+  "d4660e2f922c65994b36af3ec4c40ebe68838fc2087cbe539bffd9758d6cf44f": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 3
+      }
+    },
+    "query": "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3"
+  },
+  "e26cf6a5dcb7a99e7896bdcf986e5d6dca3026cac98f2ff285c4a93150ed77d4": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 3
+      }
+    },
+    "query": "INSERT OR REPLACE INTO sbtc_signers (signer_id, user_id, status) VALUES (?1, ?2, ?3)"
+  }
 }
