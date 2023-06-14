@@ -1,6 +1,5 @@
 use std::env;
 
-
 use stacks_signer_api::{
     db,
     routes::{
