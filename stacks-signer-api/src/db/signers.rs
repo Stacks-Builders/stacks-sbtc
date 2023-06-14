@@ -4,7 +4,7 @@ use crate::{
     signer::Signer,
 };
 
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 use warp::http;
 
 /// Add a given signer to the database.

@@ -5,7 +5,7 @@ use crate::{
     signer::{Signer, Status},
 };
 
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 use warp::http;
 
 /// Add a given delegator key to the database.
