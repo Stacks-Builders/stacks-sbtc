@@ -1,6 +1,6 @@
 use std::env;
 
-use dotenv::dotenv;
+
 use stacks_signer_api::{
     db,
     routes::{

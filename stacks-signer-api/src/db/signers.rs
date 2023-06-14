@@ -132,7 +132,7 @@ mod tests {
             status: Status::Active,
         };
 
-        let response = add_signer(signer.clone(), pool.clone())
+        let response = add_signer(signer, pool.clone())
             .await
             .expect("failed to add signer");
         assert_eq!(response.into_response().status(), StatusCode::CREATED);
@@ -167,7 +167,7 @@ mod tests {
             .await
             .expect("failed to add signer");
 
-        let response = delete_signer(signer.clone(), pool.clone())
+        let response = delete_signer(signer, pool.clone())
             .await
             .expect("failed to delete signer");
         assert_eq!(response.into_response().status(), StatusCode::OK);

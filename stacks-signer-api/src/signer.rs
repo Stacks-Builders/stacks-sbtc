@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{Encode, Sqlite};
+
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
