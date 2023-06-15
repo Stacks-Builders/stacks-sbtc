@@ -133,14 +133,12 @@ trait CoordinatorHelpers: Coordinator {
 
             // Broadcast the resulting sBTC transaction to the stacks node
             match self.stacks_node().broadcast_transaction(&mint_tx) {
-                Err(StacksNodeError::BroadcastFailure(
-                    BroadcastError::ConflictingNonceInMempool,
-                )) => {
+                Err(StacksNodeError::BroadcastError(BroadcastError::ConflictingNonceInMempool)) => {
                     warn!("Mint transaction rejected by stacks node due to conflicting nonce in mempool. Stacks node may be falling behind!");
                     warn!("Incrementing nonce and retrying...");
                     nonce = self.stacks_node_mut().next_nonce(&address)?;
                 }
-                Err(StacksNodeError::BroadcastFailure(BroadcastError::FeeTooLow(
+                Err(StacksNodeError::BroadcastError(BroadcastError::FeeTooLow(
                     expected,
                     actual,
                 ))) => {
@@ -168,14 +166,12 @@ trait CoordinatorHelpers: Coordinator {
 
             // Broadcast the resulting sBTC transaction to the stacks node
             match self.stacks_node().broadcast_transaction(&burn_tx) {
-                Err(StacksNodeError::BroadcastFailure(
-                    BroadcastError::ConflictingNonceInMempool,
-                )) => {
+                Err(StacksNodeError::BroadcastError(BroadcastError::ConflictingNonceInMempool)) => {
                     warn!("Burn transaction rejected by stacks node due to conflicting nonce in mempool. Stacks node may be falling behind!");
                     warn!("Incrementing nonce and retrying...");
                     nonce = self.stacks_node_mut().next_nonce(&address)?;
                 }
-                Err(StacksNodeError::BroadcastFailure(BroadcastError::FeeTooLow(
+                Err(StacksNodeError::BroadcastError(BroadcastError::FeeTooLow(
                     expected,
                     actual,
                 ))) => {

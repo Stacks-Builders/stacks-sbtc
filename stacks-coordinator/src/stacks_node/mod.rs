@@ -32,7 +32,7 @@ pub enum Error {
     #[error("Failed to load Stacks chain tip.")]
     BehindChainTip,
     #[error("Broadcast error: {0}")]
-    BroadcastFailure(#[from] BroadcastError),
+    BroadcastError(#[from] BroadcastError),
     #[error("Failed to call function {0}")]
     ReadOnlyFailure(String),
     #[error("Clarity Deserialization Error: {0}")]
