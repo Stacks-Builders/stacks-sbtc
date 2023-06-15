@@ -18,11 +18,7 @@ use frost_signer::{
     config::Config as SignerConfig,
     net::{Error as HttpNetError, HttpNetListen},
 };
-use std::sync::{
-    mpsc,
-    mpsc::{RecvError, Sender},
-};
-use std::{thread, time};
+use std::{sync::mpsc::RecvError, thread::sleep, time::Duration};
 use tracing::{debug, info};
 use wsts::{bip340::SchnorrProof, common::Signature, Scalar};
 
@@ -102,29 +98,14 @@ pub trait Coordinator: Sized {
     fn bitcoin_node(&self) -> &Self::BitcoinNode;
 
     // Provided methods
-    fn run(mut self) -> Result<()> {
-        let (sender, receiver) = mpsc::channel::<Command>();
-        Self::poll_ping_thread(sender);
-
+    fn run(mut self, polling_interval: u64) -> Result<()> {
         loop {
-            match receiver.recv()? {
-                Command::Stop => break,
-                Command::Timeout => {
-                    self.peg_queue().poll(self.stacks_node())?;
-                    self.process_queue()?;
-                }
-            }
-        }
-        Ok(())
-    }
+            info!("Polling for withdrawal and deposit requests to process...");
+            self.peg_queue().poll(self.stacks_node())?;
+            self.process_queue()?;
 
-    fn poll_ping_thread(sender: Sender<Command>) {
-        thread::spawn(move || loop {
-            sender
-                .send(Command::Timeout)
-                .expect("thread send error {0}");
-            thread::sleep(time::Duration::from_millis(500));
-        });
+            sleep(Duration::from_secs(polling_interval));
+        }
     }
 
     fn process_queue(&mut self) -> Result<()> {
@@ -180,7 +161,7 @@ trait CoordinatorHelpers: Coordinator {
         // Retreive the utxos
         let utxos = self
             .bitcoin_node()
-            .list_unspent(self.fee_wallet().bitcoin().address())?;
+            .list_unspent(self.fee_wallet().bitcoin())?;
 
         // Build unsigned fulfilled peg out transaction
         let mut tx = self.fee_wallet().bitcoin().fulfill_peg_out(op, utxos)?;
@@ -410,7 +391,7 @@ impl TryFrom<&Config> for StacksCoordinator {
 
         // Load the bitcoin wallet
         let local_bitcoin_node = LocalhostBitcoinNode::new(config.bitcoin_node_rpc_url.clone());
-        local_bitcoin_node.load_wallet(bitcoin_wallet.address())?;
+        local_bitcoin_node.load_wallet(&bitcoin_wallet)?;
 
         // If a user has not specified a start block height, begin from the current burn block height by default
         let start_block_height = config

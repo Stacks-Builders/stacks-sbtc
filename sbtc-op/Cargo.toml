@@ -1,13 +1,15 @@
 [package]
-name = "test-vectors"
+name = "sbtc-op"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow.workspace = true
 array-bytes.workspace = true
-bitcoin = { version = "0.30.0", features = ["serde"] }
-clap = { workspace = true }
-secp256k1 = { version = "0.27.0", features = ["global-context", "recovery"] }
+bdk.workspace = true
+bitcoin.workspace = true
+blockstack-core.workspace = true
+clap.workspace = true
 sha256.workspace = true

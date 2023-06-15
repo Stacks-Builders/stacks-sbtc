@@ -1,21 +1,10 @@
 use bitcoin::consensus::{Decodable, Encodable};
-use bitcoin::psbt::serialize::Serialize;
-use bitcoin::schnorr::TweakedPublicKey;
-use bitcoin::secp256k1::{rand, Message};
-use bitcoin::{
-    EcdsaSighashType, OutPoint, PackedLockTime, SchnorrSighashType, Script, Transaction,
-    XOnlyPublicKey,
-};
-use rand_core::OsRng;
-use test_utils::{mine_and_get_coinbase_txid, BitcoinProcess};
-use wsts::common::PolyCommitment;
-use wsts::{
-    bip340::{
-        test_helpers::{dkg, sign},
-        Error as Bip340Error, SchnorrProof,
-    },
-    v1::{self, SignatureAggregator},
-    Point,
+use bitcoin::secp256k1::Message;
+use bitcoin::{EcdsaSighashType, OutPoint};
+use test_utils::{
+    build_transaction_deposit, build_transaction_withdrawal, generate_wallet, get_raw_transaction,
+    mine_and_get_coinbase_txid, sign_transaction_ecdsa, sign_transaction_taproot, BitcoinProcess,
+    SignerHelper,
 };
 
 #[test]
@@ -113,280 +102,105 @@ fn blog_post() {
 #[test]
 fn frost_btc() {
     // Singer setup
-    let threshold = 3;
-    let total = 4;
-    let mut rng = OsRng::default();
-    let mut signers = [
-        v1::Signer::new(1, &[0, 1], total, threshold, &mut rng),
-        v1::Signer::new(2, &[2], total, threshold, &mut rng),
-        v1::Signer::new(3, &[3], total, threshold, &mut rng),
-    ];
-    let secp = bitcoin::secp256k1::Secp256k1::new();
-
+    let mut signer = SignerHelper::default();
     // DKG (Distributed Key Generation)
-    let (public_key_shares, group_public_key) = dkg_round(&mut rng, &mut signers);
-
-    // Peg Wallet Address from group key
-    let peg_wallet_address =
-        bitcoin::PublicKey::from_slice(&group_public_key.compress().as_bytes()).unwrap();
+    let (public_commitments, deposit_wallet_public_key_point, deposit_wallet_public_key) =
+        signer.run_distributed_key_generation();
 
     // bitcoind regtest
     let btcd = BitcoinProcess::new();
 
-    // create user keys
-    let user_secret_key = bitcoin::secp256k1::SecretKey::new(&mut rand::thread_rng());
-    let user_secp_public_key =
-        bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &user_secret_key);
-    let user_private_key = bitcoin::PrivateKey::new(user_secret_key, bitcoin::Network::Regtest);
-    let user_public_key = bitcoin::PublicKey::from_private_key(&secp, &user_private_key);
-    let user_address =
-        bitcoin::Address::p2wpkh(&user_public_key, bitcoin::Network::Regtest).unwrap();
-    println!("user private key {}", user_private_key);
-    println!(
-        "user address {} public key {} witness hash {:?} p2wpkh signing script {}",
-        user_address,
-        hex::encode(user_public_key.serialize()),
-        user_public_key.wpubkey_hash().unwrap(),
-        user_address.script_pubkey().p2wpkh_script_code().unwrap()
-    );
-
+    // create user source transaction keys
+    let (source_secret_key, _, source_public_key, _, source_address, secp) = generate_wallet(false);
     // mine block to create btc
-    let (txid, block_id) = mine_and_get_coinbase_txid(&btcd, &user_address);
-    println!("mined block_id {:?}", block_id);
-    println!("mined txid {:?}", txid);
-    let result = btcd.rpc("getrawtransaction", (txid.to_string(), false, block_id));
-    let user_funding_transaction_bytes_hex = result.as_str().unwrap();
-    let _ = btcd.rpc(
-        "decoderawtransaction",
-        [&user_funding_transaction_bytes_hex],
-    );
+    let (source_txid, blockhash) = mine_and_get_coinbase_txid(&btcd, &source_address);
+    let source_tx = get_raw_transaction(&btcd, &source_txid, Some(blockhash)).unwrap();
 
-    // Peg in to stx address
-    let stx_address = [0; 32];
-    let user_funding_transaction = bitcoin::Transaction::consensus_decode(
-        &mut hex::decode(user_funding_transaction_bytes_hex)
-            .unwrap()
-            .as_slice(),
-    )
-    .unwrap();
-    println!(
-        "funding tx txid {} wtxid {}",
-        user_funding_transaction.txid(),
-        user_funding_transaction.wtxid()
-    );
-    println!("funding tx {:?}", user_funding_transaction);
+    // Deposit into a stx address
+    let stx_address: [u8; 32] = [0; 32];
+    println!("funding tx {:?}", source_tx);
 
-    let funding_utxo = &user_funding_transaction.output[0];
+    let source_utxo = &source_tx.output[0];
     println!(
         "funding UTXO with {:?} sats utxo.script_pub_key: {}",
-        funding_utxo.value,
-        funding_utxo.script_pubkey.asm()
+        source_utxo.value,
+        source_utxo.script_pubkey.asm()
     );
-    let mut peg_in = build_peg_in_op_return(
-        funding_utxo.value - 1000,
-        peg_wallet_address,
+    // Use the unspent transaction from source mint transaction to build a deposit transaction
+    let source_utxo_point = OutPoint {
+        txid: source_tx.txid(),
+        vout: 0,
+    };
+
+    let mut deposit_tx = build_transaction_deposit(
+        source_utxo.value - 1000,
+        deposit_wallet_public_key,
         stx_address,
-        &user_funding_transaction,
-        0,
+        source_utxo_point,
     );
-    let peg_in_sighash_pubkey_script = user_address.script_pubkey().p2wpkh_script_code().unwrap();
-    let mut sighash_cache_peg_in = bitcoin::util::sighash::SighashCache::new(&peg_in);
-    let peg_in_sighash = sighash_cache_peg_in
-        .segwit_signature_hash(
-            0,
-            &peg_in_sighash_pubkey_script,
-            funding_utxo.value,
-            EcdsaSighashType::All,
-        )
-        .unwrap();
-    println!("peg-in segwit sighash {}", peg_in_sighash);
-    let peg_in_msg = Message::from_slice(&peg_in_sighash).unwrap();
-    let peg_in_sig = secp.sign_ecdsa_low_r(&peg_in_msg, &user_secret_key);
-    let peg_in_verify = secp.verify_ecdsa(&peg_in_msg, &peg_in_sig, &user_secp_public_key);
-    assert!(peg_in_verify.is_ok());
-    //let (peg_in_step_a, peg_in_step_b) = two_phase_peg_in(peg_wallet_address, stx_address, user_utxo);
-    peg_in.input[0]
-        .witness
-        .push_bitcoin_signature(&peg_in_sig.serialize_der(), EcdsaSighashType::All);
-    peg_in.input[0].witness.push(user_public_key.serialize());
-    let mut peg_in_bytes: Vec<u8> = vec![];
-    peg_in.consensus_encode(&mut peg_in_bytes).unwrap();
+    let deposit_bytes_hex = sign_transaction_ecdsa(
+        &source_address,
+        &source_secret_key,
+        &source_public_key,
+        &source_tx.output[0],
+        &mut deposit_tx,
+        &secp,
+    );
 
     let mut consensus_check_funding_out0: Vec<u8> = vec![];
-    user_funding_transaction.output[0]
+    deposit_tx.output[0]
         .script_pubkey
         .consensus_encode(&mut consensus_check_funding_out0)
         .unwrap();
 
     println!(
-        "peg-in tx id {} outputs {:?}",
-        peg_in.txid(),
-        peg_in
+        "deposit tx id {} outputs {:?}",
+        deposit_tx.txid(),
+        deposit_tx
             .output
             .iter()
             .map(|o| { o.value })
             .collect::<Vec<_>>()
     );
-    let peg_in_bytes_hex = hex::encode(&peg_in_bytes);
-    let _ = btcd.rpc("decoderawtransaction", [&peg_in_bytes_hex]);
-    println!("peg-in tx bytes {}", peg_in_bytes_hex);
-    let peg_in_result_value = btcd.rpc("sendrawtransaction", [&peg_in_bytes_hex]);
-    assert!(peg_in_result_value.is_string(), "{}", peg_in_result_value);
 
-    let peg_in_utxo = &peg_in.output[1];
+    let _ = btcd.rpc("decoderawtransaction", [&deposit_bytes_hex]);
+    println!("deposit tx bytes {}", deposit_bytes_hex);
+    let deposit_result_value = btcd.rpc("sendrawtransaction", [&deposit_bytes_hex]);
+    assert!(deposit_result_value.is_string(), "{}", deposit_result_value);
+
+    let deposit_utxo = &deposit_tx.output[1];
     // Peg out to btc address
-    let peg_in_utxo_point = OutPoint {
-        txid: peg_in.txid(),
+    let deposit_utxo_point = OutPoint {
+        txid: deposit_tx.txid(),
         vout: 1,
     };
-    let mut peg_out = build_peg_out(peg_in_utxo.value - 2000, user_public_key, peg_in_utxo_point);
-    let mut sighash_cache_peg_out = bitcoin::util::sighash::SighashCache::new(&peg_out);
-    let taproot_sighash = sighash_cache_peg_out
-        .taproot_key_spend_signature_hash(
-            0,
-            &bitcoin::util::sighash::Prevouts::All(&[&peg_in.output[1]]),
-            SchnorrSighashType::Default,
-        )
-        .unwrap();
-    println!("peg-out taproot sighash {}", hex::encode(taproot_sighash),);
-    let signing_payload = taproot_sighash.as_hash().to_vec();
-    // signing. Signers: 0 (parties: 0, 1) and 1 (parties: 2)
-    let schnorr_proof = signing_round(
-        &signing_payload,
-        threshold,
-        total,
-        &mut rng,
-        &mut signers,
-        public_key_shares,
-    )
-    .unwrap();
-    assert!(schnorr_proof.verify(&group_public_key.x(), &signing_payload));
+    let withdrawal_amount = deposit_utxo.value - 2000;
+    let mut withdrawal_tx =
+        build_transaction_withdrawal(withdrawal_amount, source_public_key, deposit_utxo_point);
 
-    let _taproot_sighash_msg = Message::from_slice(&taproot_sighash).unwrap();
-    let mut frost_sig_bytes = vec![];
-    frost_sig_bytes.extend(schnorr_proof.r.to_bytes());
-    frost_sig_bytes.extend(schnorr_proof.s.to_bytes());
-    // is &group_public_key.x().to_bytes() used?
-
-    peg_out.input[0].witness.push(&frost_sig_bytes);
-    println!(
-        "frost sig ({}) {}",
-        frost_sig_bytes.len(),
-        hex::encode(frost_sig_bytes)
+    let withdrawal_bytes_hex = sign_transaction_taproot(
+        &mut withdrawal_tx,
+        &deposit_utxo,
+        &mut signer,
+        &deposit_wallet_public_key_point,
+        public_commitments,
     );
     println!(
-        "peg-out tx id {} outputs {:?}",
-        peg_out.txid(),
-        peg_out
+        "withdrawal tx id {} outputs {:?}",
+        withdrawal_tx.txid(),
+        withdrawal_tx
             .output
             .iter()
             .map(|o| { o.value })
             .collect::<Vec<_>>()
     );
 
-    let mut peg_out_bytes: Vec<u8> = vec![];
-    let _peg_out_bytes_len = peg_out.consensus_encode(&mut peg_out_bytes).unwrap();
-    let peg_out_bytes_hex = hex::encode(&peg_out_bytes);
+    println!("withdrawal tx bytes {}", &withdrawal_bytes_hex);
 
-    println!("peg-out tx bytes {}", &peg_out_bytes_hex);
-
-    let peg_out_result_value = btcd.rpc("sendrawtransaction", [&peg_out_bytes_hex]);
-    assert!(peg_out_result_value.is_string(), "{}", peg_out_result_value);
-}
-
-fn build_peg_in_op_return(
-    satoshis: u64,
-    peg_wallet_address: bitcoin::PublicKey,
-    stx_address: [u8; 32],
-    utxo: &Transaction,
-    utxo_vout: u32,
-) -> Transaction {
-    let utxo_point = OutPoint {
-        txid: utxo.txid(),
-        vout: utxo_vout,
-    };
-    let witness = bitcoin::blockdata::witness::Witness::new();
-    let peg_in_input = bitcoin::TxIn {
-        previous_output: utxo_point,
-        script_sig: Default::default(),
-        sequence: bitcoin::Sequence(0xFFFFFFFF),
-        witness: witness,
-    };
-    let mut sip_21_peg_in_data = vec![0, 0, '<' as u8];
-    sip_21_peg_in_data.extend_from_slice(&stx_address);
-    let op_return = Script::new_op_return(&sip_21_peg_in_data);
-    let peg_in_output_0 = bitcoin::TxOut {
-        value: 0,
-        script_pubkey: op_return,
-    };
-    let _secp = bitcoin::util::key::Secp256k1::new();
-    // crate type weirdness
-    let peg_wallet_address_secp =
-        bitcoin::secp256k1::PublicKey::from_slice(&peg_wallet_address.to_bytes()).unwrap();
-    let peg_wallet_address_xonly = XOnlyPublicKey::from(peg_wallet_address_secp);
-    //let peg_wallet_address_tweaked = peg_wallet_address_xonly.tap_tweak(&secp, None);
-    let peg_wallet_address_tweaked =
-        TweakedPublicKey::dangerous_assume_tweaked(peg_wallet_address_xonly);
-    println!(
-        "build peg-in with shared wallet public key {} tweaked {:?}",
-        peg_wallet_address_secp, peg_wallet_address_tweaked
+    let withdrawal_result_value = btcd.rpc("sendrawtransaction", [&withdrawal_bytes_hex]);
+    assert!(
+        withdrawal_result_value.is_string(),
+        "{}",
+        withdrawal_result_value
     );
-    let taproot = Script::new_v1_p2tr_tweaked(peg_wallet_address_tweaked);
-    let peg_in_output_1 = bitcoin::TxOut {
-        value: satoshis,
-        script_pubkey: taproot,
-    };
-    bitcoin::blockdata::transaction::Transaction {
-        version: 2,
-        lock_time: PackedLockTime(0),
-        input: vec![peg_in_input],
-        output: vec![peg_in_output_0, peg_in_output_1],
-    }
-}
-
-fn build_peg_out(satoshis: u64, user_address: bitcoin::PublicKey, utxo: OutPoint) -> Transaction {
-    let peg_out_input = bitcoin::TxIn {
-        previous_output: utxo,
-        script_sig: Default::default(),
-        sequence: Default::default(),
-        witness: Default::default(),
-    };
-    let p2wpk = Script::new_v0_p2wpkh(&user_address.wpubkey_hash().unwrap());
-    let peg_out_output = bitcoin::TxOut {
-        value: satoshis,
-        script_pubkey: p2wpk,
-    };
-    bitcoin::blockdata::transaction::Transaction {
-        version: 2,
-        lock_time: PackedLockTime(0),
-        input: vec![peg_out_input],
-        output: vec![peg_out_output],
-    }
-}
-
-fn signing_round(
-    message: &[u8],
-    threshold: u32,
-    total: u32,
-    rng: &mut OsRng,
-    signers: &mut [v1::Signer; 3],
-    public_commitments: Vec<PolyCommitment>,
-) -> Result<SchnorrProof, Bip340Error> {
-    // decide which signers will be used
-    let mut signers = [signers[0].clone(), signers[1].clone()];
-
-    let (nonces, shares) = sign(message, &mut signers, rng);
-
-    let sig = SignatureAggregator::new(total, threshold, public_commitments.clone())
-        .unwrap()
-        .sign(&message, &nonces, &shares)
-        .unwrap();
-
-    SchnorrProof::new(&sig)
-}
-
-fn dkg_round(rng: &mut OsRng, signers: &mut [v1::Signer; 3]) -> (Vec<PolyCommitment>, wsts::Point) {
-    let polys = dkg(signers, rng).unwrap();
-    let pubkey = polys.iter().fold(Point::new(), |s, poly| s + poly.A[0]);
-    (polys, pubkey)
 }

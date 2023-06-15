@@ -11,4 +11,4 @@ reqwest = { workspace = true, features = ["blocking", "json"] }
 serde_json.workspace = true
 serde = { workspace = true, features = ["derive"] }
 rusqlite.workspace = true
-anyhow = "1.0.70"
+anyhow.workspace = true

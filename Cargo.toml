@@ -4,6 +4,7 @@ members = [
   "frost-test",
   "frost-signer",
   "frost-coordinator",
+  "sbtc-op",
   "stacks-coordinator",
   "stacks-signer",
   "stacks-signer-api",
@@ -13,7 +14,11 @@ members = [
   "yarpc"]
 
 [workspace.dependencies]
+anyhow = "1.0"
+array-bytes = "6.1.0"
+bdk = "0.28.0"
 bs58 = "0.4"
+bitcoin = { version = "0.29.2", features = ["rand", "bitcoinconsensus"] }
 blockstack-core = { git = "https://github.com/stacks-network/stacks-blockchain/", branch = "next" }
 clap = { version = "4.1.1", features = ["derive", "env"] }
 p256k1 = "5.1"
@@ -31,9 +36,11 @@ bincode = "1.3.3"
 itertools = "^0.10.5"
 sha2 = "0.10"
 ureq = { version = "2.6", features = ["json"] }
+url = "2.3.1"
 rand = "0.8.5"
 backoff = "0.4"
 mockall = "0.11.3"
 markdown-toc = "0.2.0"
 reqwest = "0.11.14"
 aes-gcm = "0.10"
+sha256 = "1.1.3"

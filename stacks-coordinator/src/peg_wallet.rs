@@ -3,7 +3,7 @@ use crate::bitcoin_wallet::{BitcoinWallet as BitcoinWalletStruct, Error as Bitco
 use crate::stacks_node::{self, PegOutRequestOp};
 use crate::stacks_wallet::{Error as StacksWalletError, StacksWallet as StacksWalletStruct};
 use bitcoin::secp256k1::PublicKey;
-use bitcoin::Address as BitcoinAddress;
+use bitcoin::{Address as BitcoinAddress, XOnlyPublicKey};
 use blockstack_lib::types::chainstate::StacksPublicKey;
 use blockstack_lib::{chainstate::stacks::StacksTransaction, types::chainstate::StacksAddress};
 use std::fmt::Debug;
@@ -50,14 +50,18 @@ pub trait StacksWallet {
 
 pub trait BitcoinWallet {
     type Error: Debug;
+
     // Builds a fulfilled unsigned transaction using the provided utxos to cover the spend amount
     fn fulfill_peg_out(
         &self,
         op: &PegOutRequestOp,
         txouts: Vec<UTXO>,
     ) -> Result<bitcoin_node::BitcoinTransaction, Error>;
+
     /// Returns the BTC address for the wallet
     fn address(&self) -> &BitcoinAddress;
+
+    fn x_only_pub_key(&self) -> &XOnlyPublicKey;
 }
 
 pub trait PegWallet {
