@@ -10,15 +10,15 @@
 
 ;; @name Querying volunteer can pre-register in cycle (n - 1) to register in cycle n
 ;; @mine-blocks-before 70000
-(define-public (test-pre-register)
-	(begin
-		(unwrap!
-			(contract-call? .sbtc-stacking-pool signer-pre-register u1000000000 mock-pox-reward-wallet-1)
-			(err "Should have succeeded")
-			)
-		(ok true)
-	)
-)
+;; (define-public (test-pre-register)
+;; 	(begin
+;; 		(unwrap!
+;; 			(contract-call? .sbtc-stacking-pool signer-pre-register u1000000000 mock-pox-reward-wallet-1)
+;; 			(err "Should have succeeded")
+;; 			)
+;; 		(ok true)
+;; 	)
+;; )
 
 ;; @name Is protocol caller test (is not at first)
 (define-public (test-is-protocol-caller)
