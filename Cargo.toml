@@ -17,7 +17,7 @@ members = [
 anyhow = "1.0"
 array-bytes = "6.1.0"
 bdk = "0.28.0"
-bs58 = "0.4"
+bs58 = "0.5"
 bitcoin = { version = "0.29.2", features = ["rand", "bitcoinconsensus"] }
 blockstack-core = { git = "https://github.com/stacks-network/stacks-blockchain/", branch = "next" }
 clap = { version = "4.1.1", features = ["derive", "env"] }
