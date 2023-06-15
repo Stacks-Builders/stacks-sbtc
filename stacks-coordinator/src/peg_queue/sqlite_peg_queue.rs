@@ -1,7 +1,6 @@
 use rusqlite::{Connection as RusqliteConnection, Error as RusqliteError, Row as SqliteRow};
 use std::path::Path;
 use std::str::FromStr;
-use std::time::Instant;
 
 use blockstack_lib::burnchains::Txid;
 use blockstack_lib::types::chainstate::BurnchainHeaderHash;
@@ -237,19 +236,12 @@ impl PegQueue for SqlitePegQueue {
             start_block_height, target_block_height
         );
 
-        let mut timestamp = Instant::now();
-
         for block_height in start_block_height..=target_block_height {
             self.poll_peg_in_ops(stacks_node, block_height)?;
             self.poll_peg_out_request_ops(stacks_node, block_height)?;
             self.insert_last_processed_block_height(block_height)?;
-
-            if timestamp.elapsed().as_secs_f64() > 5.0 {
-                info!("Processed block height {}", block_height);
-                timestamp = Instant::now();
-            }
+            info!("Processed block height {}", block_height);
         }
-
         Ok(())
     }
 
