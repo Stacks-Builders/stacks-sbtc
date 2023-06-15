@@ -10,6 +10,8 @@ use blockstack_lib::{
 use frost_signer::config::{PublicKeys, SignerKeyIds};
 use wsts::ecdsa::PublicKey;
 
+use self::client::BroadcastError;
+
 /// Kinds of common errors used by stacks coordinator
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -29,8 +31,8 @@ pub enum Error {
     Timeout,
     #[error("Failed to load Stacks chain tip.")]
     BehindChainTip,
-    #[error("Broadcast failure: {0}")]
-    BroadcastFailure(String),
+    #[error("Broadcast error: {0}")]
+    BroadcastFailure(#[from] BroadcastError),
     #[error("Failed to call function {0}")]
     ReadOnlyFailure(String),
     #[error("Clarity Deserialization Error: {0}")]

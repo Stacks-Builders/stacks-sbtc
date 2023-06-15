@@ -234,6 +234,10 @@ impl StacksWalletTrait for StacksWallet {
     fn public_key(&self) -> &StacksPublicKey {
         &self.public_key
     }
+
+    fn set_fee(&mut self, fee: u64) {
+        self.fee = fee;
+    }
 }
 
 #[cfg(test)]

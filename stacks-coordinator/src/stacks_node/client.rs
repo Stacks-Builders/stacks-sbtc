@@ -14,9 +14,50 @@ use reqwest::{
     StatusCode,
 };
 use serde_json::{json, Value};
-use tracing::{debug, warn};
+use tracing::debug;
 use url::Url;
 use wsts::ecdsa::PublicKey;
+
+/// Kinds of stacks node broadcast errors that can occur
+#[derive(Debug, thiserror::Error)]
+pub enum BroadcastError {
+    #[error("Fee too low. Expected: {0}, Actual: {1}")]
+    FeeTooLow(u64, u64),
+    #[error("Not enough funds: {0}")]
+    NotEnoughFunds(String),
+    #[error("Conflicting nonce in mempool")]
+    ConflictingNonceInMempool,
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<&serde_json::Value> for BroadcastError {
+    fn from(value: &serde_json::Value) -> Self {
+        let reason = value
+            .get("reason")
+            .and_then(|reason| reason.as_str())
+            .unwrap_or("Unknown Reason");
+        let reason_data = value.get("reason_data");
+        match reason {
+            "FeeTooLow" => {
+                let expected = value
+                    .get("expected")
+                    .and_then(|expected| expected.as_u64())
+                    .unwrap_or(0);
+                let actual = value
+                    .get("actual")
+                    .and_then(|actual| actual.as_u64())
+                    .unwrap_or(0);
+                BroadcastError::FeeTooLow(expected, actual)
+            }
+            "NotEnoughFunds" => BroadcastError::NotEnoughFunds(
+                reason_data.unwrap_or(&json!("No Reason Data")).to_string(),
+            ),
+            "ConflictingNonceInMempool" => BroadcastError::ConflictingNonceInMempool,
+            _ => BroadcastError::Other(reason.to_string()),
+        }
+    }
+}
 
 pub struct NodeClient {
     node_url: Url,
@@ -270,18 +311,8 @@ impl StacksNode for NodeClient {
             .send()?;
 
         if response.status() != StatusCode::OK {
-            let json_response = response
-                .json::<serde_json::Value>()
-                .map_err(|_| StacksNodeError::BehindChainTip)?;
-            let error_str = json_response
-                .get("reason")
-                .and_then(|reason| reason.as_str())
-                .unwrap_or("Unknown Reason");
-            warn!(
-                "Failed to broadcast transaction to the stacks node: {:?}",
-                error_str
-            );
-            return Err(StacksNodeError::BroadcastFailure(error_str.to_string()));
+            let json_response = response.json::<serde_json::Value>()?;
+            return Err(StacksNodeError::from(BroadcastError::from(&json_response)));
         }
         Ok(())
     }

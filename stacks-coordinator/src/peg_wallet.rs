@@ -46,6 +46,8 @@ pub trait StacksWallet {
     fn address(&self) -> &StacksAddress;
     /// Returns the sBTC public key for the wallet
     fn public_key(&self) -> &StacksPublicKey;
+    /// Sets the sBTC transaction fee
+    fn set_fee(&mut self, fee: u64);
 }
 
 pub trait BitcoinWallet {
@@ -68,6 +70,7 @@ pub trait PegWallet {
     type StacksWallet: StacksWallet;
     type BitcoinWallet: BitcoinWallet;
     fn stacks(&self) -> &Self::StacksWallet;
+    fn stacks_mut(&mut self) -> &mut Self::StacksWallet;
     fn bitcoin(&self) -> &Self::BitcoinWallet;
 }
 
@@ -82,6 +85,10 @@ impl PegWallet for WrapPegWallet {
 
     fn stacks(&self) -> &Self::StacksWallet {
         &self.stacks_wallet
+    }
+
+    fn stacks_mut(&mut self) -> &mut Self::StacksWallet {
+        &mut self.stacks_wallet
     }
 
     fn bitcoin(&self) -> &Self::BitcoinWallet {

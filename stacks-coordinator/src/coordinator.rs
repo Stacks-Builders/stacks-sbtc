@@ -19,10 +19,9 @@ use frost_signer::{
     net::{Error as HttpNetError, HttpNetListen},
 };
 use std::{sync::mpsc::RecvError, thread::sleep, time::Duration};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use wsts::{bip340::SchnorrProof, common::Signature, Scalar};
 
-use crate::config::Config;
 use crate::peg_wallet::{
     BitcoinWallet as BitcoinWalletTrait, Error as PegWalletError, PegWallet,
     StacksWallet as StacksWalletTrait, WrapPegWallet,
@@ -30,6 +29,7 @@ use crate::peg_wallet::{
 use crate::stacks_node::{self, Error as StacksNodeError};
 use crate::stacks_wallet::StacksWallet;
 use crate::{bitcoin_wallet::BitcoinWallet, util::address_version};
+use crate::{config::Config, stacks_node::client::BroadcastError};
 
 // Traits in scope
 use crate::bitcoin_node::{
@@ -122,32 +122,71 @@ trait CoordinatorHelpers: Coordinator {
     fn peg_in(&mut self, op: stacks_node::PegInOp) -> Result<()> {
         // Retrieve the nonce from the stacks node using the sBTC wallet address
         let address = *self.fee_wallet().stacks().address();
-        let nonce = self.stacks_node_mut().next_nonce(&address)?;
+        let mut nonce = self.stacks_node_mut().next_nonce(&address)?;
 
-        // Build a mint transaction using the peg in op and calculated nonce
-        let tx = self
-            .fee_wallet()
-            .stacks()
-            .build_mint_transaction(&op, nonce)?;
+        loop {
+            // Build a mint transaction using the peg in op and calculated nonce
+            let mint_tx = self
+                .fee_wallet()
+                .stacks()
+                .build_mint_transaction(&op, nonce)?;
 
-        // Broadcast the resulting sBTC transaction to the stacks node
-        self.stacks_node().broadcast_transaction(&tx)?;
-        Ok(())
+            // Broadcast the resulting sBTC transaction to the stacks node
+            match self.stacks_node().broadcast_transaction(&mint_tx) {
+                Err(StacksNodeError::BroadcastFailure(
+                    BroadcastError::ConflictingNonceInMempool,
+                )) => {
+                    warn!("Mint transaction rejected by stacks node due to conflicting nonce in mempool. Stacks node may be falling behind!");
+                    warn!("Incrementing nonce and retrying...");
+                    nonce = self.stacks_node_mut().next_nonce(&address)?;
+                }
+                Err(StacksNodeError::BroadcastFailure(BroadcastError::FeeTooLow(
+                    expected,
+                    actual,
+                ))) => {
+                    warn!("Mint transaction rejected by stacks node due to provided fee being too low: {}", actual);
+                    warn!("Incrementing fee to {} and retrying...", expected);
+                    self.fee_wallet_mut().stacks_mut().set_fee(expected);
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => return Ok(()),
+            }
+        }
     }
 
     fn peg_out(&mut self, op: stacks_node::PegOutRequestOp) -> Result<()> {
         // Retrieve the nonce from the stacks node using the sBTC wallet address
         let address = *self.fee_wallet().stacks().address();
-        let nonce = self.stacks_node_mut().next_nonce(&address)?;
+        let mut nonce = self.stacks_node_mut().next_nonce(&address)?;
 
-        // Build a burn transaction using the peg out request op and calculated nonce
-        let burn_tx = self
-            .fee_wallet()
-            .stacks()
-            .build_burn_transaction(&op, nonce)?;
+        loop {
+            // Build a burn transaction using the withdrawal request op and calculated nonce
+            let burn_tx = self
+                .fee_wallet()
+                .stacks()
+                .build_burn_transaction(&op, nonce)?;
 
-        // Broadcast the resulting sBTC transaction to the stacks node
-        self.stacks_node().broadcast_transaction(&burn_tx)?;
+            // Broadcast the resulting sBTC transaction to the stacks node
+            match self.stacks_node().broadcast_transaction(&burn_tx) {
+                Err(StacksNodeError::BroadcastFailure(
+                    BroadcastError::ConflictingNonceInMempool,
+                )) => {
+                    warn!("Burn transaction rejected by stacks node due to conflicting nonce in mempool. Stacks node may be falling behind!");
+                    warn!("Incrementing nonce and retrying...");
+                    nonce = self.stacks_node_mut().next_nonce(&address)?;
+                }
+                Err(StacksNodeError::BroadcastFailure(BroadcastError::FeeTooLow(
+                    expected,
+                    actual,
+                ))) => {
+                    warn!("Burn transaction rejected by stacks node due to provided fee being too low: {}", actual);
+                    warn!("Incrementing fee to {} and retrying...", expected);
+                    self.fee_wallet_mut().stacks_mut().set_fee(expected);
+                }
+                Err(e) => return Err(e.into()),
+                Ok(_) => break,
+            }
+        }
 
         // Build and sign a fulfilled bitcoin transaction
         let fulfill_tx = self.fulfill_peg_out(&op)?;
