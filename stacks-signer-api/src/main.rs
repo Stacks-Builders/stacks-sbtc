@@ -4,10 +4,31 @@ use stacks_signer_api::{
         keys::{add_key_route, delete_key_route, get_keys_route},
         signers::{add_signer_route, delete_signer_route, get_signers_route},
     },
+    transaction::{Transaction, TransactionResponse},
+    vote::{VoteChoice, VoteMechanism, VoteRequest, VoteResponse, VoteStatus, VoteTally},
 };
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use warp::Filter;
+
+use utoipa::OpenApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(stacks_signer_api::transaction::get_transaction_by_id),
+    components(
+        schemas(
+            Transaction,
+            VoteChoice,
+            VoteMechanism,
+            VoteRequest,
+            VoteStatus,
+            VoteTally
+        ),
+        responses(TransactionResponse, VoteResponse)
+    )
+)]
+struct ApiDoc;
 
 pub fn initiate_tracing_subscriber() {
     tracing_subscriber::registry()
@@ -18,6 +39,7 @@ pub fn initiate_tracing_subscriber() {
 
 #[tokio::main]
 async fn main() {
+    println!("{}", ApiDoc::openapi().to_pretty_json().unwrap());
     // First enable tracing
     initiate_tracing_subscriber();
 

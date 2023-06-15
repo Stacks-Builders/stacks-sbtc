@@ -15,3 +15,7 @@ pub mod key;
 pub mod routes;
 /// Signer Interactions
 pub mod signer;
+/// Transactions
+pub mod transaction;
+/// Vote
+pub mod vote;
