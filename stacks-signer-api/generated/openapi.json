@@ -106,7 +106,75 @@
             "$ref": "#/components/schemas/TransactionAddress"
           },
           "txid": {
-            "$ref": "#/components/schemas/Txid"
+            "type": "string",
+            "description": "The hexadecimal bitcoin transaction ID"
+          }
+        }
+      },
+      "TransactionAddress": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "Bitcoin"
+            ],
+            "properties": {
+              "Bitcoin": {
+                "type": "string",
+                "description": "A Bitcoin address"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "Stacks"
+            ],
+            "properties": {
+              "Stacks": {
+                "type": "string",
+                "description": "A Stacks address"
+              }
+            }
+          }
+        ],
+        "description": "The address of either a credit or debit transaction"
+      },
+      "TransactionKind": {
+        "type": "string",
+        "description": "The type of transaction being requested",
+        "enum": [
+          "DepositReveal",
+          "WithdrawalReveal",
+          "WithdrawalFulfill",
+          "WalletHandoff"
+        ]
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "description": "The response returned from a transaction request",
+        "required": [
+          "transaction",
+          "vote_tally",
+          "vote_mechanism"
+        ],
+        "properties": {
+          "transaction": {
+            "$ref": "#/components/schemas/Transaction"
+          },
+          "vote_choice": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoteChoice"
+              }
+            ],
+            "nullable": true
+          },
+          "vote_mechanism": {
+            "$ref": "#/components/schemas/VoteMechanism"
+          },
+          "vote_tally": {
+            "$ref": "#/components/schemas/VoteTally"
           }
         }
       },
@@ -145,6 +213,22 @@
           },
           "vote_choice": {
             "$ref": "#/components/schemas/VoteChoice"
+          }
+        }
+      },
+      "VoteResponse": {
+        "type": "object",
+        "description": "A response for a cast vote.",
+        "required": [
+          "vote_choice",
+          "vote_tally"
+        ],
+        "properties": {
+          "vote_choice": {
+            "$ref": "#/components/schemas/VoteChoice"
+          },
+          "vote_tally": {
+            "$ref": "#/components/schemas/VoteTally"
           }
         }
       },

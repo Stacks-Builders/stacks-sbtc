@@ -77,7 +77,7 @@ async fn get_transactions(
     let mut filtered_transactions: Vec<TransactionResponse> = vec![];
     if let Ok(txs) = db::transaction::get_transactions(&pool).await {
         for tx in txs {
-            if let Ok(vote) = get_vote_by_id(&hex::encode(tx.txid), &pool).await {
+            if let Ok(vote) = get_vote_by_id(&tx.txid, &pool).await {
                 let tx_response = TransactionResponse {
                     transaction: tx,
                     vote_tally: vote.vote_tally,
@@ -94,7 +94,7 @@ async fn get_transactions(
             } else {
                 error!(
                     "Could not find cooresponding vote for transaction: {}. Database may be corrupted!",
-                    hex::encode(tx.txid)
+                    tx.txid
                 );
                 return Ok(Box::new(StatusCode::INTERNAL_SERVER_ERROR));
             }

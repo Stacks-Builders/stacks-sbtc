@@ -1,6 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use blockstack_lib::burnchains::Txid;
 use clap::Parser;
 use rand::Rng;
 use sqlx::SqlitePool;
@@ -27,6 +26,10 @@ use warp::{
     components(
         schemas(
             Transaction,
+            TransactionAddress,
+            TransactionKind,
+            TransactionResponse,
+            VoteResponse,
             VoteChoice,
             VoteMechanism,
             VoteRequest,
@@ -228,15 +231,14 @@ fn generate_dummy_txs_votes() -> (Vec<Transaction>, Vec<Vote>) {
     let mut votes = vec![];
     for i in 0..10 {
         let tx = generate_dummy_transaction(i);
-        votes.push(generate_dummy_vote(&tx));
+        votes.push(generate_dummy_vote(tx.txid.clone()));
         txs.push(tx);
     }
     (txs, votes)
 }
 
-fn generate_dummy_vote(txs: &Transaction) -> Vote {
+fn generate_dummy_vote(txid: String) -> Vote {
     let mut rng = rand::thread_rng();
-    let txid = txs.txid;
     let vote_mechanism = if rng.gen_range(0..2) == 0 {
         VoteMechanism::Auto
     } else {
@@ -292,7 +294,7 @@ fn generate_dummy_transaction(i: usize) -> Transaction {
     };
     let transaction_block_height = rng.gen();
     Transaction {
-        txid: Txid::from([i as u8; 32]),
+        txid: hex::encode([i as u8; 32]),
         transaction_kind,
         transaction_block_height,
         transaction_deadline_block_height: transaction_block_height.unwrap_or(0)

@@ -1,7 +1,5 @@
-use std::str::FromStr;
-
-use blockstack_lib::burnchains::Txid;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use utoipa::{ToResponse, ToSchema};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
@@ -116,7 +114,7 @@ pub struct VoteRequest {
     pub vote_choice: VoteChoice,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToResponse)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToResponse, ToSchema)]
 /// A response for a cast vote.
 pub struct VoteResponse {
     /// The caller's vote
@@ -136,11 +134,11 @@ pub struct VoteTally {
     pub vote_status: VoteStatus,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 /// The current vote info for a transaction
 pub struct Vote {
-    /// The voted on transaction ID.
-    pub txid: Txid,
+    /// The voted on hexadecimal transaction ID.
+    pub txid: String,
     /// The vote tally.
     pub vote_tally: VoteTally,
     /// The vote choice.

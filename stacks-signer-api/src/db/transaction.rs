@@ -6,7 +6,6 @@ use crate::{
 };
 
 use crate::transaction::Transaction;
-use blockstack_lib::{burnchains::Txid, util::HexError};
 use sqlx::{Row, SqlitePool};
 
 // SQL queries used for performing various operations on the "transactions" table.
@@ -21,9 +20,6 @@ const SQL_SELECT_TRANSACTION_BY_ID: &str = r#"SELECT * FROM transactions WHERE t
 #[derive(thiserror::Error, Debug)]
 /// Common errors that occur when handling Transactions.
 pub enum Error {
-    /// An error that can occur when parsing a Transaction id.
-    #[error("Invalid Txid: {0}")]
-    InvalidTxid(#[from] HexError),
     /// An error that can occur when parsing a TransactionKind.
     #[error("Invalid TransactionKind: {0}")]
     InvalidTransactionKind(String),
@@ -41,7 +37,6 @@ pub async fn add_transaction(
     pool: &SqlitePool,
     transaction: &Transaction,
 ) -> Result<(), DatabaseError> {
-    let txid = hex::encode(transaction.txid);
     let transaction_kind = &transaction.transaction_kind.to_string();
     let transaction_block_height = transaction.transaction_block_height;
     let transaction_deadline_block_height = transaction.transaction_deadline_block_height;
@@ -53,7 +48,7 @@ pub async fn add_transaction(
     let transaction_credit_address = ""; //&transaction.transaction_credit_address.0;
 
     sqlx::query(SQL_INSERT_TRANSACTION)
-        .bind(txid)
+        .bind(&transaction.txid)
         .bind(transaction_kind)
         .bind(transaction_block_height.map(|height| height as i64))
         .bind(transaction_deadline_block_height as i64)
@@ -84,7 +79,6 @@ pub async fn get_transactions(pool: &SqlitePool) -> Result<Vec<Transaction>, Dat
     let mut txs = vec![];
     for row in rows {
         let txid: String = row.try_get("txid")?;
-        let txid = Txid::from_hex(&txid).map_err(|e| DatabaseError::from(Error::InvalidTxid(e)))?;
 
         let transaction_kind: String = row.try_get("transaction_kind")?;
         let transaction_kind = TransactionKind::from_str(&transaction_kind)
@@ -142,7 +136,6 @@ pub async fn get_transaction_by_id(
         .fetch_one(pool)
         .await?;
     let txid: String = row.try_get("txid")?;
-    let txid = Txid::from_hex(&txid).map_err(|e| DatabaseError::from(Error::from(e)))?;
 
     let transaction_kind: String = row.try_get("transaction_kind")?;
     let transaction_kind = TransactionKind::from_str(&transaction_kind)

@@ -1,26 +1,20 @@
 use std::str::FromStr;
 
-use blockstack_lib::burnchains::Txid;
 use serde::{Deserialize, Serialize};
 use utoipa::{ToResponse, ToSchema};
 
 use crate::vote::{VoteChoice, VoteMechanism, VoteTally};
-//TODO update all these types
-/// Temp bitcoin address type
-pub type BitcoinAddress = String;
-/// Temp stacks address type
-pub type StacksAddress = String;
 
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToSchema)]
 /// The address of either a credit or debit transaction
 pub enum TransactionAddress {
     /// A Bitcoin address
-    Bitcoin(BitcoinAddress),
+    Bitcoin(String),
     /// A Stacks address
-    Stacks(StacksAddress),
+    Stacks(String),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToSchema)]
 /// The type of transaction being requested
 pub enum TransactionKind {
     /// A BTC to sBTC deposit reveal transaction
@@ -61,7 +55,7 @@ impl std::fmt::Display for TransactionKind {
 impl Default for Transaction {
     fn default() -> Self {
         Self {
-            txid: Txid::from([0; 32]),
+            txid: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             transaction_kind: TransactionKind::DepositReveal,
             transaction_block_height: Default::default(),
             transaction_deadline_block_height: Default::default(),
@@ -82,8 +76,8 @@ impl Default for Transaction {
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToSchema)]
 /// A transaction
 pub struct Transaction {
-    /// The bitcoin transaction ID
-    pub txid: Txid,
+    /// The hexadecimal bitcoin transaction ID
+    pub txid: String,
     /// The type of transaction being voted on
     pub transaction_kind: TransactionKind,
     /// The height of the Bitcoin block that mined the commit transaction.
@@ -104,7 +98,7 @@ pub struct Transaction {
     pub transaction_credit_address: TransactionAddress,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToResponse)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToResponse, ToSchema)]
 #[response(
     description = "Transaction response returns single Transaction entity and its current vote status"
 )]

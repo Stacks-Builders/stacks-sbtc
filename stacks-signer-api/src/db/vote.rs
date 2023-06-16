@@ -5,7 +5,6 @@ use crate::{
     vote::{Vote, VoteChoice, VoteMechanism, VoteStatus},
 };
 
-use blockstack_lib::{burnchains::Txid, util::HexError};
 use sqlx::{Row, SqlitePool};
 
 // SQL queries used for performing various operations on the "votes" table.
@@ -16,9 +15,6 @@ const SQL_SELECT_VOTE_BY_ID: &str = r#"SELECT * FROM votes WHERE txid = ?"#;
 #[derive(thiserror::Error, Debug)]
 /// Common errors that occur when handling Votes.
 pub enum Error {
-    /// An error that can occur when parsing a Transaction id.
-    #[error("Invalid Txid: {0}")]
-    InvalidTxid(#[from] HexError),
     /// An error that can occur when parsing a Vote Status.
     #[error("Invalid Vote Status: {0}")]
     InvalidVoteStatus(String),
@@ -39,10 +35,8 @@ pub enum Error {
 /// # Returns
 /// * Result<(), DatabaseError>: The result of the database operation.
 pub async fn add_vote(vote: &Vote, pool: &SqlitePool) -> Result<(), DatabaseError> {
-    let txid = hex::encode(vote.txid);
-
     sqlx::query(SQL_INSERT_VOTE)
-        .bind(txid)
+        .bind(&vote.txid)
         .bind(vote.vote_tally.vote_status.to_string())
         .bind(vote.vote_choice.map(|choice| choice.to_string()))
         .bind(vote.vote_mechanism.to_string())
@@ -68,9 +62,6 @@ pub async fn get_vote_by_id(txid: &str, pool: &SqlitePool) -> Result<Vote, Datab
         .fetch_one(pool)
         .await?;
     let txid: String = row.try_get("txid")?;
-    let txid = Txid::from_hex(&txid).map_err(|e| DatabaseError::from(Error::from(e)))?;
-
-    //target_consensus, current_consensus
 
     let vote_status: String = row.try_get("vote_status")?;
     let vote_status = VoteStatus::from_str(&vote_status)
