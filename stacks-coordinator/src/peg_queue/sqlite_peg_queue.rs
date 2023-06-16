@@ -227,8 +227,10 @@ impl PegQueue for SqlitePegQueue {
             .last_processed_block_height()
             .map(|count| count + 1)
             .unwrap_or(self.start_block_height);
+
         if start_block_height > target_block_height {
-            return Ok(()); // Nothing to do
+            info!("No new blocks to process");
+            return Ok(());
         }
 
         info!(
