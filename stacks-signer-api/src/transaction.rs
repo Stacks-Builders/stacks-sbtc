@@ -1,72 +1,16 @@
-use rand::Rng;
+use std::str::FromStr;
+
+use blockstack_lib::burnchains::Txid;
 use serde::{Deserialize, Serialize};
 use utoipa::{ToResponse, ToSchema};
 
-use crate::vote::{VoteChoice, VoteMechanism, VoteStatus, VoteTally};
+use crate::vote::{VoteChoice, VoteMechanism, VoteTally};
 //TODO update all these types
 /// Temp bitcoin address type
 pub type BitcoinAddress = String;
 /// Temp stacks address type
 pub type StacksAddress = String;
-/// Temp txid type
-pub type Txid = String;
 
-/// Generate some dummy transactions for mocked backend
-pub fn create_dummy_transactons() -> Vec<TransactionResponse> {
-    let mut txs = vec![];
-    let mut rng = rand::thread_rng();
-    for i in 0..10 {
-        let current_consensus = rng.gen_range(0..100);
-        let rand_vote = rng.gen_range(0..2);
-        let vote_choice = if rand_vote == 0 {
-            Some(VoteChoice::Approve)
-        } else if rand_vote == 1 {
-            Some(VoteChoice::Reject)
-        } else {
-            None
-        };
-        let rand_kind = rng.gen_range(0..4);
-        let transaction_kind = if rand_kind == 0 {
-            TransactionKind::DepositReveal
-        } else if rand_kind == 1 {
-            TransactionKind::WithdrawalReveal
-        } else if rand_kind == 2 {
-            TransactionKind::WithdrawalFulfill
-        } else {
-            TransactionKind::WalletHandoff
-        };
-        let transaction_block_height = rng.gen();
-        let transaction = Transaction {
-            transaction_id: i.to_string(),
-            transaction_kind,
-            transaction_block_height,
-            transaction_deadline_block_height: transaction_block_height.unwrap_or(0)
-                + rng.gen_range(1..10),
-            transaction_amount: rng.gen(),
-            transaction_fees: rng.gen_range(10..1000),
-            memo: "".to_string(),
-            transaction_originator_address: TransactionAddress::Bitcoin("originator".to_string()),
-            transaction_debit_address: TransactionAddress::Bitcoin(
-                "escrow bitcoin wallet".to_string(),
-            ),
-            transaction_credit_address: TransactionAddress::Stacks(
-                "sBTC protocol address".to_string(),
-            ),
-        };
-        let tx_response = TransactionResponse {
-            transaction,
-            vote_tally: VoteTally {
-                vote_status: VoteStatus::Pending,
-                target_consensus: 70,
-                current_consensus,
-            },
-            vote_choice,
-            vote_mechanism: VoteMechanism::Manual,
-        };
-        txs.push(tx_response);
-    }
-    txs
-}
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 /// The address of either a credit or debit transaction
 pub enum TransactionAddress {
@@ -89,10 +33,35 @@ pub enum TransactionKind {
     WalletHandoff,
 }
 
+impl FromStr for TransactionKind {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<TransactionKind, Self::Err> {
+        match input.to_lowercase().as_str() {
+            "depositreveal" => Ok(TransactionKind::DepositReveal),
+            "withdrawalreveal" => Ok(TransactionKind::WithdrawalReveal),
+            "withdrawalfulfill" => Ok(TransactionKind::WithdrawalFulfill),
+            "wallethandoff" => Ok(TransactionKind::WalletHandoff),
+            _ => Err(()),
+        }
+    }
+}
+
+impl std::fmt::Display for TransactionKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TransactionKind::DepositReveal => write!(f, "depositreveal"),
+            TransactionKind::WithdrawalReveal => write!(f, "withdrawalreveal"),
+            TransactionKind::WithdrawalFulfill => write!(f, "withdrawalfulfill"),
+            TransactionKind::WalletHandoff => write!(f, "wallethandoff"),
+        }
+    }
+}
+
 impl Default for Transaction {
     fn default() -> Self {
         Self {
-            transaction_id: Default::default(),
+            txid: Txid::from([0; 32]),
             transaction_kind: TransactionKind::DepositReveal,
             transaction_block_height: Default::default(),
             transaction_deadline_block_height: Default::default(),
@@ -109,29 +78,30 @@ impl Default for Transaction {
         }
     }
 }
+
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToSchema)]
 /// A transaction
 pub struct Transaction {
     /// The bitcoin transaction ID
-    transaction_id: Txid,
+    pub txid: Txid,
     /// The type of transaction being voted on
-    transaction_kind: TransactionKind,
+    pub transaction_kind: TransactionKind,
     /// The height of the Bitcoin block that mined the commit transaction.
-    transaction_block_height: Option<u64>,
+    pub transaction_block_height: Option<u64>,
     /// The height of the Bitcoin block at which a vote is due
-    transaction_deadline_block_height: u64,
+    pub transaction_deadline_block_height: u64,
     /// The amount of sats in the transaction
-    transaction_amount: u64,
+    pub transaction_amount: u64,
     /// The amount of sats in the fee subsidy
-    transaction_fees: u64,
+    pub transaction_fees: u64,
     /// A message from the user in the transaction.
-    memo: String,
+    pub memo: Vec<u8>,
     /// Originating address
-    transaction_originator_address: TransactionAddress,
+    pub transaction_originator_address: TransactionAddress,
     /// The address of the debit wallet
-    transaction_debit_address: TransactionAddress,
+    pub transaction_debit_address: TransactionAddress,
     /// The address of the credit account
-    transaction_credit_address: TransactionAddress,
+    pub transaction_credit_address: TransactionAddress,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToResponse)]

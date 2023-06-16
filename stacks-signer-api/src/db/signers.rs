@@ -1,5 +1,5 @@
 use crate::{
-    db::{keys::delete_keys_by_id, paginate_items, Error},
+    db::{paginate_items, Error},
     routes::signers::SignerQuery,
     signer::Signer,
 };
@@ -51,9 +51,6 @@ pub async fn delete_signer(
     signer: Signer,
     pool: SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // First delete any corresponding keys
-    delete_keys_by_id(signer.signer_id, &pool).await?;
-
     let rows_deleted = sqlx::query(SQL_DELETE_SIGNER)
         .bind(signer.signer_id)
         .execute(&pool)

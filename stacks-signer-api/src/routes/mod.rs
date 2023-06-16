@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 /// Key Routes
 pub mod keys;
 /// Signer Routes

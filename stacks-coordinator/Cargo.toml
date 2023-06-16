@@ -29,11 +29,10 @@ backoff = { workspace = true }
 ureq.workspace = true
 url = { workspace = true }
 bdk.workspace = true
-hex = "0.4.3"
+hex.workspae = true
 
 [dev-dependencies]
 mockall = { workspace = true }
 rand = "0.8.5"
-hex = "0.4.3"
 test-utils = { path = "../test-utils" }
 tempdir = "0.3.7"
