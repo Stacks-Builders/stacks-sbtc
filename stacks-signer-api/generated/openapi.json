@@ -1,0 +1,249 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "stacks-signer-api",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/transactions/{id}": {
+      "get": {
+        "tags": [
+          "stacks_signer_api::routes::transaction"
+        ],
+        "summary": "Get transaction by id",
+        "description": "Get transaction by id",
+        "operationId": "get_transaction_by_id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Transaction id for retrieving a specific Transaction",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction found successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No transaction was found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Transaction": {
+        "type": "object",
+        "description": "A transaction",
+        "required": [
+          "txid",
+          "transaction_kind",
+          "transaction_deadline_block_height",
+          "transaction_amount",
+          "transaction_fees",
+          "memo",
+          "transaction_originator_address",
+          "transaction_debit_address",
+          "transaction_credit_address"
+        ],
+        "properties": {
+          "memo": {
+            "type": "string",
+            "format": "binary",
+            "description": "A message from the user in the transaction."
+          },
+          "transaction_amount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The amount of sats in the transaction",
+            "minimum": 0.0
+          },
+          "transaction_block_height": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The height of the Bitcoin block that mined the commit transaction.",
+            "nullable": true,
+            "minimum": 0.0
+          },
+          "transaction_credit_address": {
+            "$ref": "#/components/schemas/TransactionAddress"
+          },
+          "transaction_deadline_block_height": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The height of the Bitcoin block at which a vote is due",
+            "minimum": 0.0
+          },
+          "transaction_debit_address": {
+            "$ref": "#/components/schemas/TransactionAddress"
+          },
+          "transaction_fees": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The amount of sats in the fee subsidy",
+            "minimum": 0.0
+          },
+          "transaction_kind": {
+            "$ref": "#/components/schemas/TransactionKind"
+          },
+          "transaction_originator_address": {
+            "$ref": "#/components/schemas/TransactionAddress"
+          },
+          "txid": {
+            "$ref": "#/components/schemas/Txid"
+          }
+        }
+      },
+      "VoteChoice": {
+        "type": "string",
+        "description": "Vote options for a transaction ballot.",
+        "enum": [
+          "approve",
+          "reject"
+        ]
+      },
+      "VoteMechanism": {
+        "type": "string",
+        "description": "Mechanism by which a vote was cast",
+        "enum": [
+          "auto",
+          "manual"
+        ]
+      },
+      "VoteRequest": {
+        "type": "object",
+        "description": "A vote request for a transaction.",
+        "required": [
+          "txid",
+          "signing_delegator",
+          "vote_choice"
+        ],
+        "properties": {
+          "signing_delegator": {
+            "type": "string",
+            "description": "The public key of the signer delegator"
+          },
+          "txid": {
+            "type": "string",
+            "description": "The hexadecimal transaction ID."
+          },
+          "vote_choice": {
+            "$ref": "#/components/schemas/VoteChoice"
+          }
+        }
+      },
+      "VoteStatus": {
+        "type": "string",
+        "description": "The status of a transaction vote",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "noconsensus"
+        ]
+      },
+      "VoteTally": {
+        "type": "object",
+        "description": "The current vote tally for a transaction.",
+        "required": [
+          "target_consensus",
+          "current_consensus",
+          "vote_status"
+        ],
+        "properties": {
+          "current_consensus": {
+            "type": "integer",
+            "format": "int64",
+            "description": "the current consensus",
+            "minimum": 0.0
+          },
+          "target_consensus": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The percentage votes required for consensus",
+            "minimum": 0.0
+          },
+          "vote_status": {
+            "$ref": "#/components/schemas/VoteStatus"
+          }
+        }
+      }
+    },
+    "responses": {
+      "TransactionResponse": {
+        "description": "Transaction response returns single Transaction entity and its current vote status",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "description": "The response returned from a transaction request",
+              "required": [
+                "transaction",
+                "vote_tally",
+                "vote_mechanism"
+              ],
+              "properties": {
+                "transaction": {
+                  "$ref": "#/components/schemas/Transaction"
+                },
+                "vote_choice": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/VoteChoice"
+                    }
+                  ],
+                  "nullable": true
+                },
+                "vote_mechanism": {
+                  "$ref": "#/components/schemas/VoteMechanism"
+                },
+                "vote_tally": {
+                  "$ref": "#/components/schemas/VoteTally"
+                }
+              }
+            }
+          }
+        }
+      },
+      "VoteResponse": {
+        "description": "A response for a cast vote.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "description": "A response for a cast vote.",
+              "required": [
+                "vote_choice",
+                "vote_tally"
+              ],
+              "properties": {
+                "vote_choice": {
+                  "$ref": "#/components/schemas/VoteChoice"
+                },
+                "vote_tally": {
+                  "$ref": "#/components/schemas/VoteTally"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

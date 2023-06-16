@@ -136,7 +136,7 @@ pub struct VoteTally {
     pub vote_status: VoteStatus,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
 /// The current vote info for a transaction
 pub struct Vote {
     /// The voted on transaction ID.
