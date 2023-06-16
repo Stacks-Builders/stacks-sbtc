@@ -1,5 +1,6 @@
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToResponse, ToSchema};
+use utoipa::{ToResponse, ToSchema};
 
 use crate::vote::{VoteChoice, VoteMechanism, VoteStatus, VoteTally};
 //TODO update all these types
@@ -9,6 +10,63 @@ pub type BitcoinAddress = String;
 pub type StacksAddress = String;
 /// Temp txid type
 pub type Txid = String;
+
+/// Generate some dummy transactions for mocked backend
+pub fn create_dummy_transactons() -> Vec<TransactionResponse> {
+    let mut txs = vec![];
+    let mut rng = rand::thread_rng();
+    for i in 0..10 {
+        let current_consensus = rng.gen_range(0..10000);
+        let rand_vote = rng.gen_range(0..2);
+        let vote_choice = if rand_vote == 0 {
+            Some(VoteChoice::Approve)
+        } else if rand_vote == 1 {
+            Some(VoteChoice::Refuse)
+        } else {
+            None
+        };
+        let rand_kind = rng.gen_range(0..4);
+        let transaction_kind = if rand_kind == 0 {
+            TransactionKind::DepositReveal
+        } else if rand_kind == 1 {
+            TransactionKind::WithdrawalReveal
+        } else if rand_kind == 2 {
+            TransactionKind::WithdrawalFulfill
+        } else {
+            TransactionKind::WalletHandoff
+        };
+        let transaction_block_height = rng.gen();
+        let transaction = Transaction {
+            transaction_id: i.to_string(),
+            transaction_kind,
+            transaction_block_height,
+            transaction_deadline_block_height: transaction_block_height.unwrap_or(0)
+                + rng.gen_range(1..10),
+            transaction_amount: rng.gen(),
+            transaction_fees: rng.gen_range(10..1000),
+            memo: "".to_string(),
+            transaction_originator_address: TransactionAddress::Bitcoin("originator".to_string()),
+            transaction_debit_address: TransactionAddress::Bitcoin(
+                "escrow bitcoin wallet".to_string(),
+            ),
+            transaction_credit_address: TransactionAddress::Stacks(
+                "sBTC protocol address".to_string(),
+            ),
+        };
+        let tx_response = TransactionResponse {
+            transaction,
+            vote_tally: VoteTally {
+                vote_status: VoteStatus::Pending,
+                target_consensus: 7000,
+                current_consensus,
+            },
+            vote_choice,
+            vote_mechanism: VoteMechanism::Manual,
+        };
+        txs.push(tx_response);
+    }
+    txs
+}
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 /// The address of either a credit or debit transaction
 pub enum TransactionAddress {
@@ -28,7 +86,7 @@ pub enum TransactionKind {
     /// A BTC withdrawal Fullfill transaction
     WithdrawalFulfill,
     /// A sBTC wallet handoff transaction
-    HandoffTransfer,
+    WalletHandoff,
 }
 
 impl Default for Transaction {
@@ -82,50 +140,12 @@ pub struct Transaction {
 )]
 /// The response returned from a transaction request
 pub struct TransactionResponse {
-    transaction: Transaction,
-    vote_tally: VoteTally,
-    vote_choice: Option<VoteChoice>,
-    vote_mechanism: VoteMechanism,
-}
-
-#[derive(Debug, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
-/// Query parameters for the transaction list
-pub struct TransactionQuery {
-    /// The page number.
-    #[param(inline)]
-    pub page: Option<usize>,
-    /// The limit of signers per page.
-    #[param(inline)]
-    pub limit: Option<usize>,
-    /// The transaction id to filter by.
-    #[param(inline)]
-    pub id: String,
-}
-
-/// Get transaction by id
-#[utoipa::path(
-        get,
-        path = "/transactions/{id}",
-        responses(
-            (status = 200, description = "Transaction found successfully", body = TransactionResponse),
-            (status = NOT_FOUND, description = "No transaction was found")
-        ),
-        params(
-            ("id" = String, Path, description = "Transaction id for retrieving a specific Transaction"),
-        )
-    )]
-async fn get_transaction_by_id(id: String) -> TransactionResponse {
-    let mut transaction = Transaction::default();
-    transaction.transaction_id = id;
-    TransactionResponse {
-        transaction,
-        vote_tally: VoteTally {
-            vote_status: VoteStatus::Pending,
-            target_consensus: 7000,
-            current_consensus: 131,
-        },
-        vote_choice: None,
-        vote_mechanism: VoteMechanism::Manual,
-    }
+    /// The transaction
+    pub transaction: Transaction,
+    /// The current vote tally of the given transaction
+    pub vote_tally: VoteTally,
+    /// The vote choice
+    pub vote_choice: Option<VoteChoice>,
+    /// The vote mechanism used
+    pub vote_mechanism: VoteMechanism,
 }
