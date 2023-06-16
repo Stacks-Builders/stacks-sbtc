@@ -1,216 +1,108 @@
-# Stacks Signer API
+# Stacks Signer API CLI
 
-This is an API for managing signers and their associated keys in a SQLite database. The API provides a set of RESTful endpoints to add, delete, and fetch signers and keys.
+This is a CLI application for the Stacks Signer API. It provides an API server for handling transactions and votes. It can generate dummy data for testing,  generate and serve API documentation, and run a Swagger UI server.
 
-## Prerequisites
+## Requirements
 
-- Rust
-- SQLite
+- Rust and Cargo installed on your machine
 
-## API Overview
+## Installation
 
-The API is built using the Rust programming language and is designed to interact with a SQLite database. The provided endpoints allow you to manage signers, their status, and the associated keys.
+1. Clone the repository:
 
-The following endpoints are available:
+```bash
+git clone git@github.com:Trust-Machines/core-eng.git
+```
 
-- `POST /v1/signers`: Add a signer to the database
-- `DELETE /v1/signers`: Delete a signer from the database
-- `GET /v1/signers`: Get a list of signers from the database, with optional filtering by status
-- `POST /v1/keys`: Add a key to the database
-- `DELETE /v1/keys`: Delete a key from the database
-- `GET /v1/keys`: Get a list of keys from the database, with optional pagination
+2. Navigate to the project folder:
+
+```bash
+cd core-eng/stacks-signer-api
+```
+
+3. Build the CLI:
+
+```bash
+cargo build --release
+```
+
+4. Navigate to the output folder:
+
+```bash
+cd target/release
+```
 
 ## Usage
 
-To use the API, you need to send HTTP requests to the corresponding endpoints with the required JSON payloads. Follow these general steps:
+- To run the API server:
 
-1. Set up your Rust environment and SQLite database.
-2. Build and run the API server.
-3. Use an HTTP client (e.g., `curl`, Postman, or a web application) to send requests to the exposed endpoints.
-
-### Examples
-
-Here are examples for each of the supported endpoints:
-
-#### Add a signer
-
-**Request**
-
-```
-POST /v1/signers
-Content-Type: application/json
-
-{
-  "signer_id": 1,
-  "status": "Active"
-}
+```bash
+./stacks-signer-api run --address 0.0.0.0 --port 3030
 ```
 
-**Success Response**
+- To serve Swagger UI:
 
-```
-HTTP/1.1 201 CREATED
-Content-Type: application/json
-
-{
-  "status": "added"
-}
+```bash
+./stacks-signer-api swagger --address 0.0.0.0 --port 8080
 ```
 
-#### Delete a signer
+- To generate API documentation:
 
-**Request**
-
-```
-DELETE /v1/signers
-Content-Type: application/json
-
-{
-  "signer_id": 1,
-}
+```bash
+./stacks-signer-api docs --output api-doc.json
 ```
 
-**Success Response**
+- To run the API server with dummy data:
 
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{
-  "status": "deleted"
-}
+```bash
+./stacks-signer-api dummy --address 0.0.0.0 --port 3030
 ```
 
-#### Get signers
+## Command-line Arguments
 
-**Request**
+### Run
 
-```
-GET /v1/signers?status=Active
-```
+- `--address` - Address to run the API server on (Default: `0.0.0.0`)
+- `--port` - Port to run the API server on (Default: `3030`)
 
-**Success Response**
+Example:
 
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-[
-  {
-    "signer_id": 1,
-    "status": "Active"
-  },
-  {
-    "signer_id": 2,
-    "status": "Active"
-  }
-]
+```bash
+./stacks-signer-api run --address 127.0.0.1 --port 8000
 ```
 
-#### Add a key
+### Swagger
 
-**Request**
+- `--address` - Address to run the Swagger UI server on (Default: `0.0.0.0`)
+- `--port` - Port to run the Swagger UI server on (Default: `3030`)
 
-```
-POST /v1/keys
-Content-Type: application/json
+Example:
 
-{
-  "signer_id": 1,
-  "key": "example_key"
-}
+```bash
+./stacks-signer-api swagger --address 127.0.0.1 --port 8000
 ```
 
-**Success Response**
+### Docs
 
-```
-HTTP/1.1 201 CREATED
-Content-Type: application/json
+- `--output` - Output file to save the API documentation to. If not provided, it prints to stdout.
 
-{
-  "status": "added"
-}
-```
+Example:
 
-#### Delete a key
-
-**Request**
-
-```
-DELETE /v1/keys
-Content-Type: application/json
-
-{
-  "signer_id": 1,
-  "key": "example_key"
-}
+```bash
+./stacks-signer-api docs --output api-doc.json
 ```
 
-**Success Response**
+### Dummy
 
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
+- `--address` - Address to run the API server with dummy data on (Default:`0.0.0.0`)
+- `--port` - Port to run the API server with dummy data on (Default: `3030`)
 
-{
-  "status": "deleted"
-}
-```
+Example:
 
-#### Get keys
-
-**Request**
-
-```
-GET /v1/keys?signer_id=1&page=1&limit=10
+```bash
+./stacks-signer-api dummy --address 127.0.0.1 --port 8000
 ```
 
-**Success Response**
+## License
 
-```
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-[
-  "example_key1",
-  "example_key2",
-  "example_key3"
-]
-```
-
-## Failure Cases
-
-In case of incorrect input or errors, the API will return appropriate HTTP status codes and JSON error messages, such as:
-
-- 400 Bad Request: The request is malformed or missing required fields.
-- 404 Not Found: The requested signer or key is not found in the database.
-- 500 Internal Server Error: An unexpected error occurred on the server-side.
-
-In each case, the API will return a JSON object with an `error` field describing the issue:
-
-```
-{
-  "error": "Error message"
-}
-```
-
-## Success Cases
-
-When a request is successful, the API will return one of the following HTTP status codes:
-
-- 200 OK: The request was successful, and data is returned as a response.
-- 201 CREATED: The request was successful, and a new resource was created.
-
-For some endpoints, a JSON object will be returned with a `status` field indicating the result of the operation:
-
-```
-{
-  "status": "Result message"
-}
-```
-
-In other cases, the API will return the requested data in JSON format.
-
-## Conclusion
-
-This API provides a simple way to manage signers and their associated keys using a SQLite database. It exposes a set of RESTful endpoints that can be easily integrated into client applications, and can be extended with additional features or adapted to different database systems as needed.
+This project is licensed under the [MIT License](LICENSE).
