@@ -9,14 +9,11 @@ use sqlx::{Row, SqlitePool};
 use warp::http;
 
 // SQL queries used for performing various operations on the "keys" table.
-const SQL_INSERT_KEY: &str =
-    "INSERT OR REPLACE INTO keys (signer_id, user_id, key) VALUES (?1, ?2, ?3)";
-const SQL_DELETE_KEY: &str = "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3";
-const SQL_DELETE_KEYS_BY_ID: &str = "DELETE FROM keys WHERE signer_id = ?1 AND user_id = ?2";
-const SQL_SELECT_KEYS: &str =
-    "SELECT key FROM keys WHERE signer_id = ?1 AND user_id = ?2 ORDER BY key ASC";
-const SQL_COUNT_KEYS_BY_ID: &str =
-    "SELECT COUNT(*) FROM keys WHERE signer_id = ?1 AND user_id = ?2";
+const SQL_INSERT_KEY: &str = "INSERT OR REPLACE INTO keys (signer_id, key) VALUES (?1, ?2)";
+const SQL_DELETE_KEY: &str = "DELETE FROM keys WHERE signer_id = ?1 AND key = ?2";
+const SQL_DELETE_KEYS_BY_ID: &str = "DELETE FROM keys WHERE signer_id = ?1";
+const SQL_SELECT_KEYS: &str = "SELECT key FROM keys WHERE signer_id = ?1 ORDER BY key ASC";
+const SQL_COUNT_KEYS_BY_ID: &str = "SELECT COUNT(*) FROM keys WHERE signer_id = ?1";
 
 /// Add a given delegator key to the database.
 ///
@@ -31,7 +28,6 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
     // First make sure we have an existing signer id
     let count: i64 = sqlx::query(SQL_COUNT_KEYS_BY_ID)
         .bind(key.signer_id)
-        .bind(key.user_id)
         .fetch_one(&pool)
         .await
         .map_err(Error::from)?
@@ -40,7 +36,6 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
     if count == 0 {
         let signer = Signer {
             signer_id: key.signer_id,
-            user_id: key.user_id,
             status: Status::Inactive,
         };
         add_signer(signer, pool.clone()).await?;
@@ -49,7 +44,6 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
     // Insert the key into the database
     sqlx::query(SQL_INSERT_KEY)
         .bind(key.signer_id)
-        .bind(key.user_id)
         .bind(key.key.as_str())
         .execute(&pool)
         .await
@@ -65,7 +59,6 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
 ///
 /// # Params
 /// * signer_id: i64 - The signer ID.
-/// * user_id: i64 - The user ID.
 /// * pool: &SqlitePool - The reference to the Sqlite database connection pool.
 ///
 /// # Returns
@@ -73,12 +66,10 @@ pub async fn add_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, war
 ///   indicating if the operation was successful or not.
 pub async fn delete_keys_by_id(
     signer_id: i64,
-    user_id: i64,
     pool: &SqlitePool,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let rows_deleted = sqlx::query(SQL_DELETE_KEYS_BY_ID)
         .bind(signer_id)
-        .bind(user_id)
         .execute(pool)
         .await
         .map_err(Error::from)?
@@ -108,7 +99,6 @@ pub async fn delete_keys_by_id(
 pub async fn delete_key(key: Key, pool: SqlitePool) -> Result<impl warp::Reply, warp::Rejection> {
     let rows_deleted = sqlx::query(SQL_DELETE_KEY)
         .bind(key.signer_id)
-        .bind(key.user_id)
         .bind(key.key.as_str())
         .execute(&pool)
         .await
@@ -143,7 +133,6 @@ pub async fn get_keys(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let keys: Vec<String> = sqlx::query(SQL_SELECT_KEYS)
         .bind(query.signer_id)
-        .bind(query.user_id)
         .fetch_all(&pool)
         .await
         .map_err(Error::from)?
@@ -178,7 +167,6 @@ mod tests {
         let pool = init_db().await;
         let key = Key {
             signer_id: 1,
-            user_id: 1,
             key: "key".to_string(),
         };
 
@@ -187,12 +175,13 @@ mod tests {
             .expect("failed to add key");
         assert_eq!(response.into_response().status(), StatusCode::CREATED);
 
-        let row = sqlx::query(
-                "SELECT signer_id, user_id, key FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3").bind(key.signer_id).bind(key.user_id).bind(key.key.as_str()).fetch_one(&pool).await.expect("Failed to get added key");
-        assert_eq!(
-            (row.get(0), row.get(1), row.get(2)),
-            (key.signer_id, key.user_id, key.key)
-        );
+        let row = sqlx::query("SELECT signer_id, key FROM keys WHERE signer_id = ?1 AND key = ?2")
+            .bind(key.signer_id)
+            .bind(key.key.as_str())
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to get added key");
+        assert_eq!((row.get(0), row.get(1)), (key.signer_id, key.key));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -201,7 +190,6 @@ mod tests {
         let pool = init_db().await;
         let key = Key {
             signer_id: 1,
-            user_id: 1,
             key: "key".to_string(),
         };
 
@@ -214,16 +202,14 @@ mod tests {
             .expect("failed to delete key");
         assert_eq!(response.into_response().status(), StatusCode::OK);
 
-        let row_count: i64 = sqlx::query(
-            "SELECT COUNT(*) FROM keys WHERE signer_id = ?1 AND user_id = ?2 AND key = ?3",
-        )
-        .bind(key.signer_id)
-        .bind(key.user_id)
-        .bind(key.key)
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to get number of keys")
-        .get(0);
+        let row_count: i64 =
+            sqlx::query("SELECT COUNT(*) FROM keys WHERE signer_id = ?1 AND key = ?2")
+                .bind(key.signer_id)
+                .bind(key.key)
+                .fetch_one(&pool)
+                .await
+                .expect("Failed to get number of keys")
+                .get(0);
         assert_eq!(row_count, 0);
     }
 
@@ -234,22 +220,18 @@ mod tests {
         let keys_to_insert = vec![
             Key {
                 signer_id: 1,
-                user_id: 1,
                 key: "key1".to_string(),
             },
             Key {
                 signer_id: 1,
-                user_id: 1,
                 key: "key2".to_string(),
             },
             Key {
                 signer_id: 2,
-                user_id: 1,
                 key: "key3".to_string(),
             },
             Key {
                 signer_id: 2,
-                user_id: 1,
                 key: "key1".to_string(),
             },
         ];
@@ -260,7 +242,6 @@ mod tests {
 
         let query = KeysQuery {
             signer_id: 1,
-            user_id: 1,
             page: Some(1),
             limit: Some(2),
         };
@@ -280,7 +261,6 @@ mod tests {
 
         let query = KeysQuery {
             signer_id: 2,
-            user_id: 1,
             page: Some(1),
             limit: Some(2),
         };
@@ -300,7 +280,6 @@ mod tests {
 
         let query = KeysQuery {
             signer_id: 2,
-            user_id: 1,
             page: Some(1),
             limit: Some(1),
         };

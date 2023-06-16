@@ -49,8 +49,6 @@ impl FromStr for Status {
 pub struct Signer {
     /// The signer's ID.
     pub signer_id: i64,
-    /// The user's ID.
-    pub user_id: i64,
     /// The current status of the signer.
     pub status: Status,
 }

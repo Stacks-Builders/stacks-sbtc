@@ -29,18 +29,18 @@ pub struct TransactionQuery {
         ("id" = usize, Path, description = "Transaction id for retrieving a specific Transaction"),
     )
 )]
-async fn get_transaction_by_id(id: String) -> Result<impl warp::Reply, warp::Rejection> {
+async fn get_transaction_by_id(id: String) -> Result<Box<dyn Reply>, Infallible> {
     let txs = create_dummy_transactons();
     if let Ok(id) = id.parse::<usize>() {
-        if id > txs.len() {
-            return Err(warp::reject::not_found());
+        if id >= txs.len() {
+            return Ok(Box::new(StatusCode::NOT_FOUND));
         }
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&serde_json::json!(&txs[id])),
+        return Ok(Box::new(warp::reply::with_status(
+            warp::reply::json(&txs[id]),
             StatusCode::OK,
-        ));
+        )));
     }
-    Err(warp::reject::not_found())
+    return Ok(Box::new(StatusCode::NOT_FOUND));
 }
 
 /// Get list of all transactions
@@ -65,7 +65,10 @@ async fn get_transactions(query: TransactionQuery) -> Result<impl Reply, Infalli
         filtered_transactions = transactions;
     }
     let results = paginate_items(&filtered_transactions, query.page, query.limit);
-    Ok(warp::reply::json(&results))
+    Ok(Box::new(warp::reply::with_status(
+        warp::reply::json(&results),
+        StatusCode::OK,
+    )))
 }
 
 /// Route for getting a list of transactions.
@@ -76,8 +79,7 @@ async fn get_transactions(query: TransactionQuery) -> Result<impl Reply, Infalli
 pub fn get_transactions_route(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
-        .and(warp::path("v1"))
-        .and(warp::path("transactions"))
+        .and(warp::path!("v1" / "transactions"))
         .and(warp::path::end())
         .and(warp::query::<TransactionQuery>())
         .and_then(get_transactions)

@@ -6,7 +6,7 @@ use stacks_signer_api::{
     routes::{
         keys::{add_key_route, delete_key_route, get_keys_route},
         signers::{add_signer_route, delete_signer_route, get_signers_route},
-        transaction::{get_transaction_by_id_route, get_transactions_route},
+        transaction::{get_transaction_by_id_route, get_transactions_route}, vote::vote_route,
     },
     transaction::{Transaction, TransactionResponse},
     vote::{VoteChoice, VoteMechanism, VoteRequest, VoteResponse, VoteStatus, VoteTally},
@@ -72,10 +72,12 @@ async fn main() {
     // Signer routes
     let add_signer_route = add_signer_route(pool.clone());
     let delete_signer_route = delete_signer_route(pool.clone());
-    let get_signers_route = get_signers_route(pool);
+    let get_signers_route = get_signers_route(pool.clone());
     // Transaction routes
     let get_transactions_route = get_transactions_route();
     let get_transaction_by_id_route = get_transaction_by_id_route();
+    // Vote routes
+    let vote_route = vote_route(pool);
 
     // Combine the routes
     let routes = add_key_route
@@ -85,7 +87,8 @@ async fn main() {
         .or(delete_signer_route)
         .or(get_signers_route)
         .or(get_transactions_route)
-        .or(get_transaction_by_id_route);
+        .or(get_transaction_by_id_route)
+        .or(vote_route);
 
     // Run the server
     let server = format!("{}:{}", cli.address, cli.port);

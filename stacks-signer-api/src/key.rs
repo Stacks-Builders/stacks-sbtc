@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 pub struct Key {
     /// The signer's ID.
     pub signer_id: i64,
-    /// The user's ID.
-    pub user_id: i64,
     /// The public key of the signer.
     pub key: String,
 }

@@ -23,10 +23,9 @@ impl warp::reject::Reject for Error {}
 const SQL_SCHEMA_SIGNERS: &str = r#"
     CREATE TABLE IF NOT EXISTS sbtc_signers (
         signer_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
         status TEXT NOT NULL,
 
-        PRIMARY KEY(signer_id, user_id)
+        PRIMARY KEY(signer_id)
     );"#;
 
 // SQL schema for creating the `keys` table
@@ -34,10 +33,9 @@ const SQL_SCHEMA_KEYS: &str = r#"
         CREATE TABLE IF NOT EXISTS keys (
             key TEXT NOT NULL,
             signer_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
     
-            PRIMARY KEY(key, signer_id, user_id),
-            FOREIGN KEY(signer_id, user_id) REFERENCES sbtc_signers(signer_id, user_id)
+            PRIMARY KEY(key, signer_id),
+            FOREIGN KEY(signer_id) REFERENCES sbtc_signers(signer_id)
         );
         "#;
 

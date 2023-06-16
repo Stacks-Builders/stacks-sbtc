@@ -4,15 +4,17 @@ use utoipa::{ToResponse, ToSchema};
 use crate::transaction::Txid;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
 /// Vote options for a transaction ballot.
 pub enum VoteChoice {
     /// Approve the transaction.
     Approve,
-    /// Refuse the transaction
-    Refuse,
+    /// Reject the transaction
+    Reject,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
 /// Mechanism by which a vote was cast
 pub enum VoteMechanism {
     /// The vote was cast automatically
@@ -22,6 +24,7 @@ pub enum VoteMechanism {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
 /// The status of a transaction vote
 pub enum VoteStatus {
     /// The vote is incomplete and pending votes
@@ -35,14 +38,14 @@ pub enum VoteStatus {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToSchema)]
-/// A vote header common between all vote requests
+/// A vote request for a transaction.
 pub struct VoteRequest {
     /// The voted on transaction ID.
-    txid: Txid,
+    transaction_id: Txid,
     /// The public key of the signer delegator
     signing_delegator: String,
     /// The vote choice.
-    vote_choice: Option<VoteChoice>,
+    vote_choice: VoteChoice,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize, ToResponse)]
@@ -59,9 +62,9 @@ pub struct VoteResponse {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize, ToSchema)]
 /// The current vote tally for a transaction.
 pub struct VoteTally {
-    /// The percentage votes*100 required for consensus
+    /// The percentage votes required for consensus
     pub target_consensus: u64,
-    /// the current consensus*100
+    /// the current consensus
     pub current_consensus: u64,
     /// the vote status
     pub vote_status: VoteStatus,

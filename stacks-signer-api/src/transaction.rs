@@ -16,12 +16,12 @@ pub fn create_dummy_transactons() -> Vec<TransactionResponse> {
     let mut txs = vec![];
     let mut rng = rand::thread_rng();
     for i in 0..10 {
-        let current_consensus = rng.gen_range(0..10000);
+        let current_consensus = rng.gen_range(0..100);
         let rand_vote = rng.gen_range(0..2);
         let vote_choice = if rand_vote == 0 {
             Some(VoteChoice::Approve)
         } else if rand_vote == 1 {
-            Some(VoteChoice::Refuse)
+            Some(VoteChoice::Reject)
         } else {
             None
         };
@@ -57,7 +57,7 @@ pub fn create_dummy_transactons() -> Vec<TransactionResponse> {
             transaction,
             vote_tally: VoteTally {
                 vote_status: VoteStatus::Pending,
-                target_consensus: 7000,
+                target_consensus: 70,
                 current_consensus,
             },
             vote_choice,

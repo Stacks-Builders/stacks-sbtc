@@ -4,6 +4,8 @@ pub mod keys;
 pub mod signers;
 /// Transaction Routes
 pub mod transaction;
+/// Vote Routes
+pub mod vote;
 
 use std::convert::Infallible;
 
